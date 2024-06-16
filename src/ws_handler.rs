@@ -10,6 +10,9 @@ use tungstenite::Error::{ConnectionClosed, Io, Protocol};
 use tungstenite::Message;
 use crate::error::{ConnectionClosedError, NoSuchKeyError};
 use crate::{Client, ClientList, WsStream};
+use json;
+use json::parse;
+use crate::structs::respond::Respond;
 
 pub async fn ws_handler(ws_stream: WsStream, sql_pool: Arc<Pool<Sqlite>>, mut client_list: ClientList) -> Result<(), Box<dyn std::error::Error + Send + Sync>>
 {
@@ -37,10 +40,14 @@ pub async fn ws_handler(ws_stream: WsStream, sql_pool: Arc<Pool<Sqlite>>, mut cl
                                 status_code = 1;
                                 // 获取锁
                                 let mut client_list = client_list.write().await;
+                                // 将客户端信息推送至客户端列表
                                 client_list.push(Client{client_key:key.clone(),client_handler:tx.clone()});
                                 client_key = key;
                                 // 释放锁
-                                drop(client_list)
+                                drop(client_list);
+                                // 发送响应数据
+                                let respond = Respond{code:0,msg:row.0};
+                                let _ = write.send(Message::Binary(serde_json::to_vec(&respond).unwrap())).await;
                             }
                             Ok(None) => {
                                 eprintln!("客户端发送了无效的key，断开链接");

@@ -4,12 +4,12 @@ use tokio::net::TcpListener;
 use tokio::net::TcpStream;
 use tokio::sync::{mpsc, RwLock};
 use tokio_tungstenite::{accept_async, WebSocketStream};
-use crate::traits::client::Client;
+use crate::structs::client::Client;
 
 mod database;
 mod ws_handler;
 mod error;
-mod traits;
+mod structs;
 
 type WsStream = WebSocketStream<TcpStream>;
 type ClientList = Arc<RwLock<Vec<Client>>>;
