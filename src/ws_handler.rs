@@ -103,7 +103,7 @@ pub async fn ws_handler(ws_stream: WsStream, sql_pool: Arc<Pool<Sqlite>>, mut cl
     Ok(())
 }
 
-async fn remove_client(client_list: &mut ClientList, mut client_key: String) {
+async fn remove_client(client_list: &mut ClientList, client_key: String) {
     let mut client_list = client_list.write().await;
     client_list.retain(|client| client.client_key != client_key);
     drop(client_list)
