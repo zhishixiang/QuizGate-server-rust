@@ -30,7 +30,7 @@ async fn main() {
         let listener = TcpListener::bind(&addr).await.unwrap();
         println!("Listening on: {}", addr);
         // 创建 HttpServer 实例并配置服务
-        let actix_thread = spawn(move || {
+        let _actix_thread = spawn(move || {
             new_actix_server();
         });
 
