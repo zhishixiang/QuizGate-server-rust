@@ -109,7 +109,7 @@
             this.paper_id = window.location.pathname
             axios({
                 method: 'get',
-                url: '/api/get_tests/' + this.paper_id,
+                url: '/api/get_test' + this.paper_id,
                 responseType: 'stream'
             })
                 .then((response) => {
