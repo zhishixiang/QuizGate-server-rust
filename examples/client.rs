@@ -9,7 +9,7 @@ async fn main() {
     let url = Url::parse("ws://127.0.0.1:9001").unwrap();
     let (mut ws_stream, _) = connect_async(url).await.expect("Failed to connect");
 
-    println!("WebSocket handshake has been successfully completed");
+    println!("WebSocket握手成功");
 
     // 发送消息到服务器
     let msg = Message::text("Hello, WebSocket server!");
