@@ -1,13 +1,14 @@
+use std::fmt::Error;
 use std::sync::Arc;
 use futures_util::{StreamExt, SinkExt};
-use rusqlite::{Connection, OptionalExtension, params};
 use tokio::sync::Mutex;
 use log::error;
-use rusqlite::Error::QueryReturnedNoRows;
+use sqlx::{pool::Pool, sqlite::{Sqlite, SqlitePoolOptions}};
+use tungstenite::Message;
 use crate::error::{ConnectionClosedError, NoSuchKeyError};
 use crate::WsStream;
 
-pub async fn ws_handler(ws_stream: WsStream, conn: Arc<Mutex<Connection>>) -> Result<(), Box<dyn std::error::Error + Send + Sync>>
+pub async fn ws_handler(ws_stream: WsStream, sql_pool: Arc<Mutex<Pool<Sqlite>>>) -> Result<(), Box<dyn std::error::Error + Send + Sync>>
 {
     let (mut write, mut read) = ws_stream.split();
 
@@ -16,34 +17,31 @@ pub async fn ws_handler(ws_stream: WsStream, conn: Arc<Mutex<Connection>>) -> Re
         match msg {
             Ok(msg) => {
                 let key = msg.to_string();
-                println!("{}", msg.clone().into_text().unwrap());
+                let sql_pool = sql_pool.lock().await;
+                let result: Result<Option<(String,)>, sqlx::Error> = sqlx::query_as("SELECT name FROM server_info WHERE key = ?")
+                    .bind(&key)
+                    .fetch_optional(&*sql_pool)
+                    .await;
 
-                let conn = conn.lock().await;
-                let mut stmt = match conn.prepare("SELECT name FROM server_info WHERE key=?") {
-                    Ok(stmt) => stmt,
-                    Err(e) => {
-                        error!("Failed to prepare statement: {}", e);
-                        return Err(ConnectionClosedError.into());
-                    }
-                };
-
-                let result: Result<String, _> = stmt.query_row(params![key], |row| row.get(0));
                 match result {
-                    Ok(name) => {
-                        println!("Name: {:?}", name);
+                    Ok(Some(row)) => {
+                        println!("客户端{}上线", row.0)
                     }
-                    Err(QueryReturnedNoRows) => {
-                        eprintln!("客户端发送了一个无效的key，断开链接");
-                        return Err(ConnectionClosedError.into());
+                    Ok(None) => {
+                        eprintln!("客户端发送了无效的key，断开链接");
+                        let _ = write.send(Message::Close(None)).await;
+                        return Err(NoSuchKeyError.into());
                     }
                     Err(e) => {
                         error!("Failed to execute query: {}", e);
+                        let _ = write.send(Message::Close(None)).await;
                         return Err(ConnectionClosedError.into());
                     }
                 }
             }
             Err(e) => {
                 eprintln!("Error receiving message: {}", e);
+                let _ = write.send(Message::Close(None)).await;
                 return Err(ConnectionClosedError.into());
             }
         }

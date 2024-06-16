@@ -5,7 +5,8 @@ edition = "2021"
 
 [dependencies]
 tokio = { version = "1", features = ["full"] }
-rusqlite = { version = "0.31.0", features = ["bundled"] }
+sqlx = { version = "0.7", features = ["sqlite", "runtime-tokio", "macros"] }
+sqlx-core = "0.7.4"
 bytes = "1.6.0"
 tokio-tungstenite = "0.21.0"
 futures-util = "0.3.30"
