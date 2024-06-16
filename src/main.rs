@@ -1,14 +1,12 @@
 use std::sync::Arc;
-use std::thread;
 use std::thread::spawn;
 
-use actix_web::{App, HttpServer, web};
 use tokio::net::TcpListener;
 use tokio::net::TcpStream;
 use tokio::sync::RwLock;
 use tokio_tungstenite::{accept_async, WebSocketStream};
-use crate::exam_webserver::{index, new_actix_server};
 
+use crate::exam_webserver::new_actix_server;
 use crate::structs::client::Client;
 
 mod database;

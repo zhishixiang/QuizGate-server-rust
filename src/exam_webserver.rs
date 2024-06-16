@@ -1,6 +1,7 @@
 use std::path::PathBuf;
+
 use actix_files::NamedFile;
-use actix_web::{get, post, Result, web, App, HttpResponse, HttpServer, Responder, HttpRequest};
+use actix_web::{App, get, HttpRequest, HttpServer, Result, web};
 
 #[get("/{test_id}")]
 async fn index(path: web::Path<(String)>) -> Result<NamedFile> {
