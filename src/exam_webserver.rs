@@ -8,7 +8,7 @@ use std::path::Path;
 use actix_web::web::to;
 use serde::Deserialize;
 use serde_json::{json, Value};
-use crate::RequestStack;
+use crate::Queue;
 use crate::structs::request::Request;
 use crate::structs::submit::{SubmitRequest, SubmitResponse};
 
@@ -50,6 +50,7 @@ async fn get_test(req: HttpRequest) -> HttpResponse {
         };
         // 移除不该出现的部分
         test_info.as_object_mut().unwrap().remove("pass");
+        test_info.as_object_mut().unwrap().remove("client_key");
         if let Some(questions) = test_info["questions"].as_array_mut() {
             for question in questions {
                 question.as_object_mut().unwrap().remove("correct");
@@ -66,9 +67,9 @@ async fn get_test(req: HttpRequest) -> HttpResponse {
     }
 }
 
-async fn submit(req_body: web::Json<SubmitRequest>, data: web::Data<RequestStack>) -> HttpResponse {
-    // 获取request_stack栈
-    let request_stack = data.get_ref();
+async fn submit(req_body: web::Json<SubmitRequest>, data: web::Data<Queue>) -> HttpResponse {
+    // 获取queue栈
+    let queue = data.get_ref();
     // 获取post请求内容
     let answer = &req_body.answer;
     let player_id = &req_body.player_id;
@@ -117,7 +118,7 @@ async fn submit(req_body: web::Json<SubmitRequest>, data: web::Data<RequestStack
     // 返回分数和是否及格并将请求压入栈
     if score > paper_info["pass"].as_i64().unwrap() {
         pass = true;
-        request_stack.lock().unwrap().push(Request{ client_key: paper_info["client_key"].to_string(), player_id: player_id.to_string() });
+        queue.lock().unwrap().push(Request { client_key: paper_info["client_key"].to_string(), player_id: player_id.to_string() });
     };
     HttpResponse::Ok().json(SubmitResponse {
         score,
@@ -125,12 +126,12 @@ async fn submit(req_body: web::Json<SubmitRequest>, data: web::Data<RequestStack
     })
 }
 
-pub fn new_actix_server(request_stack: RequestStack) {
+pub fn new_actix_server(queue: Queue) {
     let sys = actix_rt::System::new();
     sys.block_on(async {
         let server = HttpServer::new(|| {
             App::new()
-                .app_data(web::Data::new(request_stack))
+                .app_data(web::Data::new(queue))
                 .service(index)
                 .route("/resources/{filename:.*}", web::get().to(resources))
                 .service(

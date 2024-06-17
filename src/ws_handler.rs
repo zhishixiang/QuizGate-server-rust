@@ -19,7 +19,7 @@ pub async fn ws_handler(ws_stream: WsStream, sql_pool: Arc<Pool<Sqlite>>, mut cl
     let (mut write, mut read) = ws_stream.split();
     let (tx, rx) = mpsc::channel::<String>(4);
     //状态码定义：0为初始化，1为连接成功，只有为0时才进行验证流程
-    let mut status_code:i8 = 0;
+    let mut status_code: i8 = 0;
     let mut client_key = String::new();
     // 读取消息
     while let Some(msg) = read.next().await {
@@ -30,7 +30,7 @@ pub async fn ws_handler(ws_stream: WsStream, sql_pool: Arc<Pool<Sqlite>>, mut cl
                         // 获取密钥
                         let key = msg.to_string();
                         // 验证密钥是否存在
-                        let result: Result<Option<(String,)>, sqlx::Error> = sqlx::query_as("SELECT name FROM server_info WHERE key = ?")
+                        let result: Result<Option<(String, )>, sqlx::Error> = sqlx::query_as("SELECT name FROM server_info WHERE key = ?")
                             .bind(&key)
                             .fetch_optional(&*sql_pool)
                             .await;
@@ -39,14 +39,14 @@ pub async fn ws_handler(ws_stream: WsStream, sql_pool: Arc<Pool<Sqlite>>, mut cl
                                 println!("客户端{}上线", row.0);
                                 status_code = 1;
                                 // 获取锁
-                                let mut client_list = client_list.write().await;
+                                let mut client_list = client_list.lock().unwrap();
                                 // 将客户端信息推送至客户端列表
-                                client_list.push(Client{client_key:key.clone(),client_handler:tx.clone()});
+                                client_list.push(Client { client_key: key.clone(), client_handler: tx.clone() });
                                 client_key = key;
                                 // 释放锁
                                 drop(client_list);
                                 // 发送响应数据
-                                let respond = Respond{code:0,msg:row.0};
+                                let respond = Respond { code: 0, msg: row.0 };
                                 let _ = write.send(Message::Binary(serde_json::to_vec(&respond).unwrap())).await;
                             }
                             Ok(None) => {
@@ -67,7 +67,7 @@ pub async fn ws_handler(ws_stream: WsStream, sql_pool: Arc<Pool<Sqlite>>, mut cl
                 }
                 Message::Close(_) => {
                     println!("Client closed the connection");
-                    if status_code == 1{
+                    if status_code == 1 {
                         remove_client(&mut client_list, client_key).await;
                     }
                     break;
@@ -77,21 +77,21 @@ pub async fn ws_handler(ws_stream: WsStream, sql_pool: Arc<Pool<Sqlite>>, mut cl
             Err(e) => match e {
                 ConnectionClosed => {
                     println!("客户端断开链接");
-                    if status_code == 1{
+                    if status_code == 1 {
                         remove_client(&mut client_list, client_key).await;
                     }
                     break;
                 }
                 Io(ref err) if err.kind() == std::io::ErrorKind::ConnectionReset => {
                     println!("客户端异常退出");
-                    if status_code == 1{
+                    if status_code == 1 {
                         remove_client(&mut client_list, client_key).await;
                     }
                     break;
                 }
                 _ => {
                     println!("Other error: {}", e);
-                    if status_code == 1{
+                    if status_code == 1 {
                         remove_client(&mut client_list, client_key).await;
                     }
                     break;
@@ -104,7 +104,6 @@ pub async fn ws_handler(ws_stream: WsStream, sql_pool: Arc<Pool<Sqlite>>, mut cl
 }
 
 async fn remove_client(client_list: &mut ClientList, client_key: String) {
-    let mut client_list = client_list.write().await;
+    let mut client_list = client_list.lock().unwrap();
     client_list.retain(|client| client.client_key != client_key);
-    drop(client_list)
 }
