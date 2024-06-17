@@ -8,6 +8,8 @@ use std::path::Path;
 use actix_web::web::to;
 use serde::Deserialize;
 use serde_json::{json, Value};
+use crate::RequestStack;
+use crate::structs::request::Request;
 use crate::structs::submit::{SubmitRequest, SubmitResponse};
 
 
@@ -15,13 +17,15 @@ use crate::structs::submit::{SubmitRequest, SubmitResponse};
 async fn index() -> Result<NamedFile> {
     Ok(NamedFile::open(PathBuf::from("templates/exam.html"))?)
 }
+
 // 静态资源
 async fn resources(req: HttpRequest) -> Result<NamedFile> {
-    let mut path:PathBuf = PathBuf::from("resources/");
-    let filename:String = req.match_info().query("filename").parse().unwrap();
+    let mut path: PathBuf = PathBuf::from("resources/");
+    let filename: String = req.match_info().query("filename").parse().unwrap();
     path.push(filename);
     Ok(NamedFile::open(path)?)
 }
+
 // 获取试题内容
 async fn get_test(req: HttpRequest) -> HttpResponse {
     let mut test_info: Value = json!({});
@@ -44,7 +48,8 @@ async fn get_test(req: HttpRequest) -> HttpResponse {
             Ok(json) => json,
             Err(_) => return HttpResponse::InternalServerError().json(json!({"code": 500})),
         };
-
+        // 移除不该出现的部分
+        test_info.as_object_mut().unwrap().remove("pass");
         if let Some(questions) = test_info["questions"].as_array_mut() {
             for question in questions {
                 question.as_object_mut().unwrap().remove("correct");
@@ -56,13 +61,14 @@ async fn get_test(req: HttpRequest) -> HttpResponse {
         "data": test_info,
         "is_server_online": true
         }))
-    }else {
-        HttpResponse::Ok().json(json!({
-        "code": 404
-        }))
+    } else {
+        HttpResponse::Ok().json(json!({"code": 404}))
     }
 }
-async fn submit(req_body: web::Json<SubmitRequest>) -> HttpResponse{
+
+async fn submit(req_body: web::Json<SubmitRequest>, data: web::Data<RequestStack>) -> HttpResponse {
+    // 获取request_stack栈
+    let request_stack = data.get_ref();
     // 获取post请求内容
     let answer = &req_body.answer;
     let player_id = &req_body.player_id;
@@ -75,25 +81,29 @@ async fn submit(req_body: web::Json<SubmitRequest>) -> HttpResponse{
             Ok(file) => file,
             Err(_) => return HttpResponse::InternalServerError().json(json!({"code": 500})),
         };
-
+        // 从文件读取问卷信息
         let mut contents = String::new();
         if let Err(_) = file.read_to_string(&mut contents) {
             return HttpResponse::InternalServerError().json(json!({"code": 500}));
         }
-
+        // 转换为json文件
         paper_info = match serde_json::from_str(&contents) {
             Ok(json) => json,
             Err(_) => return HttpResponse::InternalServerError().json(json!({"code": 500})),
         };
-
+        // 进行评分
         let questions = paper_info["questions"].as_array().unwrap();
         for (i, question) in questions.iter().enumerate() {
+            // 多选题
             if question["type"] == "multiple" {
+                // 回答完全正确
                 if answer[i] == question["correct"] {
                     score += question["score"][1].as_i64().unwrap();
+                    // 部分内容正确且回答不为空
                 } else if answer[i].as_i64() < question["correct"].as_i64() && !answer[i].is_null() {
                     score += question["score"][0].as_i64().unwrap();
                 }
+                // 单选题
             } else if question["type"] == "radio" {
                 if answer[i] == question["correct"] {
                     score += question["score"].as_i64().unwrap();
@@ -103,29 +113,30 @@ async fn submit(req_body: web::Json<SubmitRequest>) -> HttpResponse{
     } else {
         return HttpResponse::NotFound().json(json!({"code": 404}));
     }
-    return if score > paper_info["pass"].as_i64().unwrap() {
-        HttpResponse::Ok().json(SubmitResponse {
-            score,
-            pass: true,
-        })
-    } else {
-        HttpResponse::Ok().json(SubmitResponse {
-            score,
-            pass: false,
-        })
-    }
+    let mut pass = false;
+    // 返回分数和是否及格并将请求压入栈
+    if score > paper_info["pass"].as_i64().unwrap() {
+        pass = true;
+        request_stack.lock().unwrap().push(Request{ client_key: paper_info["client_key"].to_string(), player_id: player_id.to_string() });
+    };
+    HttpResponse::Ok().json(SubmitResponse {
+        score,
+        pass,
+    })
 }
-pub fn new_actix_server(){
+
+pub fn new_actix_server(request_stack: RequestStack) {
     let sys = actix_rt::System::new();
     sys.block_on(async {
         let server = HttpServer::new(|| {
             App::new()
+                .app_data(web::Data::new(request_stack))
                 .service(index)
-                .route("/resources/{filename:.*}",web::get().to(resources))
+                .route("/resources/{filename:.*}", web::get().to(resources))
                 .service(
                     web::scope("/api")
-                        .route("/get_test/{filename:.*}",web::get().to(get_test))
-                        .route("/submit",web::post().to(submit))
+                        .route("/get_test/{filename:.*}", web::get().to(get_test))
+                        .route("/submit", web::post().to(submit))
                 )
         })
             .bind("127.0.0.1:8081")
