@@ -12,8 +12,7 @@ use crate::structs::submit::{SubmitRequest, SubmitResponse};
 
 
 #[get("/{test_id}")]
-async fn index(path: web::Path<(String)>) -> Result<NamedFile> {
-    let test_id = path.into_inner();
+async fn index() -> Result<NamedFile> {
     Ok(NamedFile::open(PathBuf::from("templates/exam.html"))?)
 }
 // 静态资源
@@ -26,10 +25,10 @@ async fn resources(req: HttpRequest) -> Result<NamedFile> {
 // 获取试题内容
 async fn get_test(req: HttpRequest) -> HttpResponse {
     let mut test_info: Value = json!({});
-    let mut path:PathBuf = PathBuf::from("tests/");
-    let filename:String = req.match_info().query("filename").parse().unwrap();
+    let mut path: PathBuf = PathBuf::from("tests/");
+    let filename: String = req.match_info().query("filename").parse().unwrap();
     // 为文件加上后缀名
-    path.push(filename+".json");
+    path.push(filename + ".json");
     if Path::new(&path).exists() {
         let mut file = match File::open(&path) {
             Ok(file) => file,
@@ -52,14 +51,19 @@ async fn get_test(req: HttpRequest) -> HttpResponse {
                 question.as_object_mut().unwrap().remove("score");
             }
         }
-    }
-    HttpResponse::Ok().json(json!({
+        HttpResponse::Ok().json(json!({
         "code": 200,
         "data": test_info,
         "is_server_online": true
-    }))
+        }))
+    }else {
+        HttpResponse::Ok().json(json!({
+        "code": 404
+        }))
+    }
 }
 async fn submit(req_body: web::Json<SubmitRequest>) -> HttpResponse{
+    // 获取post请求内容
     let answer = &req_body.answer;
     let player_id = &req_body.player_id;
     let test_id = &req_body.paper_id;
@@ -99,16 +103,16 @@ async fn submit(req_body: web::Json<SubmitRequest>) -> HttpResponse{
     } else {
         return HttpResponse::NotFound().json(json!({"code": 404}));
     }
-    if score > paper_info["pass"].as_i64().unwrap() {
-        return HttpResponse::Ok().json(SubmitResponse {
+    return if score > paper_info["pass"].as_i64().unwrap() {
+        HttpResponse::Ok().json(SubmitResponse {
             score,
             pass: true,
-        });
-    }else {
-        return HttpResponse::Ok().json(SubmitResponse {
+        })
+    } else {
+        HttpResponse::Ok().json(SubmitResponse {
             score,
             pass: false,
-        });
+        })
     }
 }
 pub fn new_actix_server(){
