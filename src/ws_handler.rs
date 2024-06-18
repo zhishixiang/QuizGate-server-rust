@@ -39,7 +39,7 @@ pub async fn ws_handler(ws_stream: WsStream, sql_pool: Arc<Pool<Sqlite>>, mut cl
                                 println!("客户端{}上线", row.0);
                                 status_code = 1;
                                 // 获取锁
-                                let mut client_list = client_list.lock().unwrap();
+                                let mut client_list = client_list.lock().await;
                                 // 将客户端信息推送至客户端列表
                                 client_list.push(Client { client_key: key.clone(), client_handler: tx.clone() });
                                 client_key = key;
@@ -104,6 +104,6 @@ pub async fn ws_handler(ws_stream: WsStream, sql_pool: Arc<Pool<Sqlite>>, mut cl
 }
 
 async fn remove_client(client_list: &mut ClientList, client_key: String) {
-    let mut client_list = client_list.lock().unwrap();
+    let mut client_list = client_list.lock().await;
     client_list.retain(|client| client.client_key != client_key);
 }

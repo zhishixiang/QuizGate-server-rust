@@ -1,14 +1,13 @@
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc};
 use std::thread::spawn;
-use serde::{Deserialize, Serialize};
 
+use serde::{Deserialize, Serialize};
 use tokio::net::TcpListener;
 use tokio::net::TcpStream;
-use tokio::sync::RwLock;
+use tokio::sync::Mutex;
 use tokio_tungstenite::{accept_async, WebSocketStream};
 
 use crate::exam_webserver::new_actix_server;
-use crate::message_queue::new_message_queue;
 use crate::structs::client::Client;
 use crate::structs::request::Request;
 
@@ -38,8 +37,9 @@ async fn main() {
         let listener = TcpListener::bind(&addr).await.unwrap();
         println!("Listening on: {}", addr);
         // 创建 HttpServer 实例并配置服务
+        let queue = Arc::clone(&queue);
         let _actix_thread = spawn(move || {
-            new_actix_server(Arc::clone(&queue));
+            new_actix_server(queue);
         });
         // 创建消息队列线程
         client_list = Arc::clone(&client_list);

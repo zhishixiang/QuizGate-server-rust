@@ -118,7 +118,7 @@ async fn submit(req_body: web::Json<SubmitRequest>, data: web::Data<Queue>) -> H
     // 返回分数和是否及格并将请求压入栈
     if score > paper_info["pass"].as_i64().unwrap() {
         pass = true;
-        queue.lock().unwrap().push(Request { client_key: paper_info["client_key"].to_string(), player_id: player_id.to_string() });
+        queue.lock().await.messages.push(Request { client_key: paper_info["client_key"].to_string(), player_id: player_id.to_string() });
     };
     HttpResponse::Ok().json(SubmitResponse {
         score,
@@ -128,10 +128,10 @@ async fn submit(req_body: web::Json<SubmitRequest>, data: web::Data<Queue>) -> H
 
 pub fn new_actix_server(queue: Queue) {
     let sys = actix_rt::System::new();
-    sys.block_on(async {
-        let server = HttpServer::new(|| {
+    sys.block_on(async move {
+        let server = HttpServer::new(move || {
             App::new()
-                .app_data(web::Data::new(queue))
+                .app_data(web::Data::new(queue.clone()))
                 .service(index)
                 .route("/resources/{filename:.*}", web::get().to(resources))
                 .service(
