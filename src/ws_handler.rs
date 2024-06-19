@@ -1,5 +1,4 @@
 use std::fmt::Error;
-use std::ptr::null;
 use std::sync::Arc;
 use futures_util::{StreamExt, SinkExt};
 use tokio::sync::{mpsc, Mutex, RwLock};

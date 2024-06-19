@@ -1,17 +1,32 @@
 use std::fs::{File, OpenOptions};
 use std::io::{self, Read, Write};
+use std::thread::sleep;
+use std::time::Duration;
+
 use serde::{Deserialize, Serialize};
 use serde_json;
 
+use crate::ClientList;
+use crate::structs::request::Request;
+
 #[derive(Serialize, Deserialize)]
 struct MessageQueue {
-    messages: Vec<String>,
+    messages: Vec<Request>,
 }
 
-pub fn write_message_to_json_file(filename: &str, message: &str) -> io::Result<()> {
-    let mut queue = read_messages_from_json_file(filename).unwrap_or(MessageQueue { messages: vec![] });
+pub fn create_mq_thread(client_list: ClientList){
+    let filename = "queue.json";
+    loop{
+        let mut queue:MessageQueue = read_messages_from_json_file(filename).unwrap_or(MessageQueue { messages: vec![] });
+        println!("当前队列有{}条消息",queue.messages.len());
+        sleep(Duration::from_secs(4));
+    }
+}
+pub fn write_message_to_json_file(message: Request) -> io::Result<()> {
+    let filename = "queue.json";
+    let mut queue:MessageQueue = read_messages_from_json_file(filename).unwrap_or(MessageQueue { messages: vec![] });
 
-    queue.messages.push(message.to_string());
+    queue.messages.push(message);
 
     let serialized = serde_json::to_string(&queue)?;
     let mut file = OpenOptions::new().create(true).write(true).truncate(true).open(filename)?;

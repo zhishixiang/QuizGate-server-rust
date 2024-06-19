@@ -8,6 +8,7 @@ use tokio::sync::Mutex;
 use tokio_tungstenite::{accept_async, WebSocketStream};
 
 use crate::exam_webserver::new_actix_server;
+use crate::message_queue::create_mq_thread;
 use crate::structs::client::Client;
 use crate::structs::request::Request;
 
@@ -31,6 +32,7 @@ async fn main() {
     let mut client_list: ClientList = Arc::new(Mutex::new(vec![]));
     // 新建消息队列
     let queue:Queue = Arc::new(Mutex::new(MessageQueue { messages: vec![] }));
+    // 新建sql连接池
     if let Ok(sql_pool) = database::new_sql_pool().await {
         let sql_pool = Arc::new(sql_pool);
         let addr = "127.0.0.1:9001";
@@ -42,8 +44,9 @@ async fn main() {
             new_actix_server(queue);
         });
         // 创建消息队列线程
-        client_list = Arc::clone(&client_list);
-
+        spawn(|| {
+            create_mq_thread(Arc::clone(&client_list));
+        });
         // 接受tcp链接
         while let Ok((stream, addr)) = listener.accept().await {
             println!("客户端{}请求连接", addr.ip());
