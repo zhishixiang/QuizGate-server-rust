@@ -68,9 +68,7 @@ async fn get_test(req: HttpRequest) -> HttpResponse {
     }
 }
 
-async fn submit(req_body: web::Json<SubmitRequest>, data: web::Data<Queue>) -> HttpResponse {
-    // 获取queue栈
-    let queue = data.get_ref();
+async fn submit(req_body: web::Json<SubmitRequest>) -> HttpResponse {
     // 获取post请求内容
     let answer = &req_body.answer;
     let player_id = &req_body.player_id;
@@ -103,7 +101,6 @@ async fn submit(req_body: web::Json<SubmitRequest>, data: web::Data<Queue>) -> H
     // 返回分数和是否及格并将请求压入栈
     if score >= paper_info["pass"].as_i64().unwrap() {
         pass = true;
-        queue.lock().await.messages.push(Request { client_key: paper_info["client_key"].to_string(), player_id: player_id.to_string() });
         write_message_to_json_file(Request { client_key: paper_info["client_key"].to_string(), player_id: player_id.to_string() }).expect("写入消息队列失败");
     };
     HttpResponse::Ok().json(SubmitResponse {
@@ -137,12 +134,11 @@ fn mark(answer: &Vec<Value>, paper_info: &Value) -> i64{
 }
 
 // 启动actix服务
-pub fn new_actix_server(queue: Queue) {
+pub fn new_actix_server() {
     let sys = actix_rt::System::new();
     sys.block_on(async move {
         let server = HttpServer::new(move || {
             App::new()
-                .app_data(web::Data::new(queue.clone()))
                 .service(index)
                 .route("/resources/{filename:.*}", web::get().to(resources))
                 .service(

@@ -29,9 +29,7 @@ struct MessageQueue {
 #[tokio::main]
 async fn main() {
     // 新建客户端列表以存储所有正在连接的客户端
-    let mut client_list: ClientList = Arc::new(Mutex::new(vec![]));
-    // 新建消息队列
-    let queue:Queue = Arc::new(Mutex::new(MessageQueue { messages: vec![] }));
+    let client_list: ClientList = Arc::new(Mutex::new(vec![]));
     // 新建sql连接池
     if let Ok(sql_pool) = database::new_sql_pool().await {
         let sql_pool = Arc::new(sql_pool);
@@ -39,24 +37,24 @@ async fn main() {
         let listener = TcpListener::bind(&addr).await.unwrap();
         println!("Listening on: {}", addr);
         // 创建 HttpServer 实例并配置服务
-        let queue = Arc::clone(&queue);
         let _actix_thread = spawn(move || {
-            new_actix_server(queue);
+            new_actix_server();
         });
+        let client_list_mq = client_list.clone();
         // 创建消息队列线程
-        spawn(|| {
-            create_mq_thread(Arc::clone(&client_list));
+        spawn(move || {
+            create_mq_thread(client_list_mq);
         });
         // 接受tcp链接
         while let Ok((stream, addr)) = listener.accept().await {
             println!("客户端{}请求连接", addr.ip());
             let sql_pool = Arc::clone(&sql_pool);
-            let client_list = Arc::clone(&client_list);
+            let client_list_ws = Arc::clone(&client_list);
             tokio::spawn(async move {
                 // 升级为websocket链接
                 match accept_async(stream).await {
                     // 升级成功
-                    Ok(ws_stream) => ws_handler::ws_handler(ws_stream, sql_pool, client_list).await,
+                    Ok(ws_stream) => ws_handler::ws_handler(ws_stream, sql_pool, client_list_ws).await,
 
                     // 升级失败
                     Err(e) => Ok({
