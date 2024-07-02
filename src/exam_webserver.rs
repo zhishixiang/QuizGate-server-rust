@@ -1,15 +1,17 @@
 use std::fs::File;
 use std::io::Read;
+use std::ops::Deref;
 use std::path::PathBuf;
 
 use actix_files::NamedFile;
 use actix_web::{App, get, HttpRequest, HttpResponse, HttpServer, Result, web};
 use std::path::Path;
+use std::sync::Arc;
 use actix_web::web::to;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use crate::message_queue::write_message_to_json_file;
-use crate::Queue;
+use crate::ClientList;
 use crate::structs::request::Request;
 use crate::structs::submit::{SubmitRequest, SubmitResponse};
 
@@ -68,7 +70,8 @@ async fn get_test(req: HttpRequest) -> HttpResponse {
     }
 }
 
-async fn submit(req_body: web::Json<SubmitRequest>) -> HttpResponse {
+async fn submit(req_body: web::Json<SubmitRequest>, data: web::Data<ClientList>) -> HttpResponse {
+    let client_list = data.get_ref();
     // 获取post请求内容
     let answer = &req_body.answer;
     let player_id = &req_body.player_id;
@@ -98,15 +101,22 @@ async fn submit(req_body: web::Json<SubmitRequest>) -> HttpResponse {
         return HttpResponse::NotFound().json(json!({"code": 404}));
     }
     let mut pass = false;
-    // 返回分数和是否及格并将请求压入栈
+    // 返回分数和是否及格并直接通知客户端
+    // 消息队列真tm难整，先不整了
+    for client in client_list.lock().await.deref(){
+        if(client.client_key == paper_info["client_key"]){
+            client.client_handler.send(player_id.clone()).await.expect("TODO: panic message");
+        }
+    }
     if score >= paper_info["pass"].as_i64().unwrap() {
         pass = true;
-        write_message_to_json_file(Request { client_key: paper_info["client_key"].to_string(), player_id: player_id.to_string() }).expect("写入消息队列失败");
+        // write_message_to_json_file(Request { client_key: paper_info["client_key"].to_string(), player_id: player_id.to_string() }).expect("写入消息队列失败");
     };
     HttpResponse::Ok().json(SubmitResponse {
         score,
         pass,
     })
+
 }
 
 // 干得好，我要给你打易佰昏！
@@ -134,12 +144,13 @@ fn mark(answer: &Vec<Value>, paper_info: &Value) -> i64{
 }
 
 // 启动actix服务
-pub fn new_actix_server() {
+pub fn new_actix_server(client_list: ClientList) {
     let sys = actix_rt::System::new();
     sys.block_on(async move {
         let server = HttpServer::new(move || {
             App::new()
                 .service(index)
+                .app_data(web::Data::new(Arc::clone(&client_list)))
                 .route("/resources/{filename:.*}", web::get().to(resources))
                 .service(
                     web::scope("/api")

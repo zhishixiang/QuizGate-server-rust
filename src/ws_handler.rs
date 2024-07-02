@@ -16,7 +16,7 @@ use crate::structs::respond::Respond;
 pub async fn ws_handler(ws_stream: WsStream, sql_pool: Arc<Pool<Sqlite>>, mut client_list: ClientList) -> Result<(), Box<dyn std::error::Error + Send + Sync>>
 {
     let (mut write, mut read) = ws_stream.split();
-    let (tx, rx) = mpsc::channel::<String>(4);
+    let (tx, mut rx) = mpsc::channel::<String>(4);
     //状态码定义：0为初始化，1为连接成功，只有为0时才进行验证流程
     let mut status_code: i8 = 0;
     let mut client_key = String::new();
@@ -47,6 +47,11 @@ pub async fn ws_handler(ws_stream: WsStream, sql_pool: Arc<Pool<Sqlite>>, mut cl
                                 // 发送响应数据
                                 let respond = Respond { code: 0, msg: row.0 };
                                 let _ = write.send(Message::Binary(serde_json::to_vec(&respond).unwrap())).await;
+                                loop {
+                                    let add_player_respond = Respond { code: 2, msg: rx.recv().await.unwrap() };
+                                    let _ = write.send(Message::Binary(serde_json::to_vec(&add_player_respond).unwrap())).await;
+                                    println!("1");
+                                }
                             }
                             Ok(None) => {
                                 eprintln!("客户端发送了无效的key，断开链接");

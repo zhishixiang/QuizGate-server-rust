@@ -21,7 +21,7 @@ mod message_queue;
 
 type WsStream = WebSocketStream<TcpStream>;
 type ClientList = Arc<Mutex<Vec<Client>>>;
-type Queue = Arc<Mutex<MessageQueue>>;
+// type Queue = Arc<Mutex<MessageQueue>>;
 #[derive(Serialize, Deserialize)]
 struct MessageQueue {
     messages: Vec<Request>,
@@ -37,14 +37,16 @@ async fn main() {
         let listener = TcpListener::bind(&addr).await.unwrap();
         println!("Listening on: {}", addr);
         // 创建 HttpServer 实例并配置服务
+        let client_list_actix = Arc::clone(&client_list);
         let _actix_thread = spawn(move || {
-            new_actix_server();
+            new_actix_server(client_list_actix);
         });
-        let client_list_mq = client_list.clone();
         // 创建消息队列线程
+        /*
         spawn(move || {
             create_mq_thread(client_list_mq);
         });
+        */
         // 接受tcp链接
         while let Ok((stream, addr)) = listener.accept().await {
             println!("客户端{}请求连接", addr.ip());

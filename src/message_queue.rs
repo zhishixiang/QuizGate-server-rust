@@ -1,5 +1,6 @@
 use std::fs::{File, OpenOptions};
 use std::io::{self, Read, Write};
+use std::ops::Deref;
 use std::thread::sleep;
 use std::time::Duration;
 
@@ -14,11 +15,12 @@ struct MessageQueue {
     messages: Vec<Request>,
 }
 
-pub fn create_mq_thread(client_list: ClientList){
+pub async fn create_mq_thread(client_list: ClientList){
+    todo!();
     let filename = "queue.json";
     loop{
         let mut queue:MessageQueue = read_messages_from_json_file(filename).unwrap_or(MessageQueue { messages: vec![] });
-        println!("当前队列有{}条消息",queue.messages.len());
+        let client_list = client_list.lock().await.deref();
         sleep(Duration::from_secs(4));
     }
 }
