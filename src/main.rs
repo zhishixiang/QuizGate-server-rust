@@ -1,31 +1,30 @@
-use std::sync::{Arc};
+use std::sync::Arc;
 use std::thread::spawn;
 
-use serde::{Deserialize, Serialize};
 use tokio::net::TcpListener;
 use tokio::net::TcpStream;
 use tokio::sync::Mutex;
 use tokio_tungstenite::{accept_async, WebSocketStream};
 
 use crate::exam_webserver::new_actix_server;
-use crate::message_queue::create_mq_thread;
 use crate::structs::client::Client;
-use crate::structs::request::Request;
 
 mod database;
 mod ws_handler;
 mod error;
 mod structs;
 mod exam_webserver;
+/*
 mod message_queue;
-
-type WsStream = WebSocketStream<TcpStream>;
-type ClientList = Arc<Mutex<Vec<Client>>>;
-// type Queue = Arc<Mutex<MessageQueue>>;
 #[derive(Serialize, Deserialize)]
 struct MessageQueue {
     messages: Vec<Request>,
 }
+*/
+type WsStream = WebSocketStream<TcpStream>;
+type ClientList = Arc<Mutex<Vec<Client>>>;
+// type Queue = Arc<Mutex<MessageQueue>>;
+
 #[tokio::main]
 async fn main() {
     // 新建客户端列表以存储所有正在连接的客户端

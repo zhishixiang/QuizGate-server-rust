@@ -1,16 +1,12 @@
-use std::fmt::Error;
 use std::sync::Arc;
 use futures_util::{StreamExt, SinkExt};
-use tokio::sync::{mpsc, Mutex, RwLock};
+use tokio::sync::mpsc;
 use log::error;
-use sqlx::{pool::Pool, sqlite::{Sqlite, SqlitePoolOptions}};
-use sqlx::types::JsonValue::Null;
-use tungstenite::Error::{ConnectionClosed, Io, Protocol};
+use sqlx::{pool::Pool, sqlite::Sqlite};
+use tungstenite::Error::{ConnectionClosed, Io};
 use tungstenite::Message;
 use crate::error::{ConnectionClosedError, NoSuchKeyError};
 use crate::{Client, ClientList, WsStream};
-use json;
-use json::parse;
 use crate::structs::respond::Respond;
 
 pub async fn ws_handler(ws_stream: WsStream, sql_pool: Arc<Pool<Sqlite>>, mut client_list: ClientList) -> Result<(), Box<dyn std::error::Error + Send + Sync>>

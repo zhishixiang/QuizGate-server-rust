@@ -7,12 +7,8 @@ use actix_files::NamedFile;
 use actix_web::{App, get, HttpRequest, HttpResponse, HttpServer, Result, web};
 use std::path::Path;
 use std::sync::Arc;
-use actix_web::web::to;
-use serde::Deserialize;
 use serde_json::{json, Value};
-use crate::message_queue::write_message_to_json_file;
 use crate::ClientList;
-use crate::structs::request::Request;
 use crate::structs::submit::{SubmitRequest, SubmitResponse};
 
 
@@ -103,13 +99,13 @@ async fn submit(req_body: web::Json<SubmitRequest>, data: web::Data<ClientList>)
     let mut pass = false;
     // 返回分数和是否及格并直接通知客户端
     // 消息队列真tm难整，先不整了
-    for client in client_list.lock().await.deref(){
-        if(client.client_key == paper_info["client_key"]){
-            client.client_handler.send(player_id.clone()).await.expect("TODO: panic message");
-        }
-    }
     if score >= paper_info["pass"].as_i64().unwrap() {
         pass = true;
+        for client in client_list.lock().await.deref(){
+            if client.client_key == paper_info["client_key"] {
+                client.client_handler.send(player_id.clone()).await.expect("TODO: panic message");
+            }
+        }
         // write_message_to_json_file(Request { client_key: paper_info["client_key"].to_string(), player_id: player_id.to_string() }).expect("写入消息队列失败");
     };
     HttpResponse::Ok().json(SubmitResponse {
