@@ -62,16 +62,17 @@ pub async fn ws_handler(ws_stream: WsStream, sql_pool: Arc<Pool<Sqlite>>, mut cl
                             }
                         }
                     }
-                    Message::Ping(_) | Message::Pong(_) => {
+                    Ok(Message::Ping(_)) | Ok(Message::Pong(_)) => {
                         // Ping and Pong messages can be handled here
                     }
-                    Message::Close(_) => {
+                    Ok(Message::Close(_)) => {
                         println!("Client closed the connection");
                         if status_code == 1 {
                             remove_client(&mut client_list, client_key).await;
                         }
                         break;
                     }
+                _ => {}
             }
         }
         while status_code == 1 {

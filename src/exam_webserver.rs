@@ -4,7 +4,8 @@ use std::ops::Deref;
 use std::path::PathBuf;
 
 use actix_files::NamedFile;
-use actix_web::{App, get, HttpRequest, HttpResponse, HttpServer, Result, web};
+use actix_web::{App, get, HttpRequest, HttpResponse, HttpServer, Result, web, Error};
+use actix_ws::AggregatedMessage;
 use std::path::Path;
 use std::sync::Arc;
 use serde_json::{json, Value};
@@ -139,8 +140,18 @@ fn mark(answer: &Vec<Value>, paper_info: &Value) -> i64{
     score
 }
 
+async fn handle_ws_connection(req: HttpRequest, stream: web::Payload) -> Result<HttpResponse, Error> {
+    let (res, mut session, stream) = actix_ws::handle(&req, stream)?;
+
+    let mut stream = stream
+        .aggregate_continuations()
+        // aggregate continuation frames up to 1MiB
+        .max_continuation_size(2_usize.pow(20));
+
+    todo!()
+}
 // 启动actix服务
-pub fn new_actix_server(client_list: ClientList) {
+pub fn new_webserver(client_list: ClientList) {
     let sys = actix_rt::System::new();
     sys.block_on(async move {
         let server = HttpServer::new(move || {

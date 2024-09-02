@@ -6,7 +6,7 @@ use tokio::net::TcpStream;
 use tokio::sync::Mutex;
 use tokio_tungstenite::{accept_async, WebSocketStream};
 
-use crate::exam_webserver::new_actix_server;
+use crate::exam_webserver::new_webserver;
 use crate::structs::client::Client;
 
 mod database;
@@ -38,7 +38,7 @@ async fn main() {
         // 创建 HttpServer 实例并配置服务
         let client_list_actix = Arc::clone(&client_list);
         let _actix_thread = spawn(move || {
-            new_actix_server(client_list_actix);
+            new_webserver(client_list_actix);
         });
         // 创建消息队列线程
         /*

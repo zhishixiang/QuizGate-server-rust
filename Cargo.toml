@@ -22,6 +22,7 @@ serde = { version = "1.0.203", features = ["derive"] }
 actix-web = "4"
 actix-rt = "2"
 actix-files = "0.6.5"
+actix-ws = "0.3.0"
 [build-dependencies]
 cc = "1.0"
 
