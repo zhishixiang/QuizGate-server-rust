@@ -14,6 +14,7 @@ mod ws_handler;
 mod error;
 mod structs;
 mod exam_webserver;
+mod ws_server;
 /*
 mod message_queue;
 #[derive(Serialize, Deserialize)]

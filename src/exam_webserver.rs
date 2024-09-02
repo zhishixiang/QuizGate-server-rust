@@ -12,7 +12,12 @@ use serde_json::{json, Value};
 use crate::ClientList;
 use crate::structs::submit::{SubmitRequest, SubmitResponse};
 
-
+// 连接ID
+pub type ConnId = usize;
+// 客户端发送的验证密钥
+pub type Key = String;
+// 通过考试的玩家ID
+pub type PlayerId = String;
 #[get("/{test_id}")]
 async fn index() -> Result<NamedFile> {
     Ok(NamedFile::open(PathBuf::from("templates/exam.html"))?)
