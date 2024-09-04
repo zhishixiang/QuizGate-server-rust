@@ -159,13 +159,12 @@ fn mark(answer: &Vec<Value>, paper_info: &Value) -> i64{
 
 async fn handle_ws_connection(req: HttpRequest,
                               stream: web::Payload,
-                              chat_server: web::Data<WsServerHandle>,
+                              ws_server: web::Data<WsServerHandle>,
 ) -> Result<HttpResponse, Error> {
-    println!("111");
     let (res, session, msg_stream) = actix_ws::handle(&req, stream)?;
     // 新建一个websocket handler
     spawn_local(ws_handler::chat_ws(
-        (**chat_server).clone(),
+        (**ws_server).clone(),
         session,
         msg_stream,
     ));

@@ -107,21 +107,21 @@ pub struct WsServerHandle {
 
 impl WsServerHandle {
     /// 处理来自客户端的连接
-    pub async fn connect(&self, conn_tx: mpsc::UnboundedSender<Key>) -> ConnId {
+    pub async fn connect(&self, conn_tx: mpsc::UnboundedSender<Key>) -> Result<ConnId, io::Error> {
         let (res_tx, res_rx) = oneshot::channel();
 
         // 验证客户端密钥
-        todo!();
-
+        println!();
         // 密钥错误就断开链接
-        todo!();
         // 向服务器注册客户端
+        let id = random::<ConnId>();
         self.cmd_tx
             .send(Command::Connect { conn_tx, res_tx })
             .unwrap();
 
         // unwrap: chat server does not drop out response channel
-        res_rx.await.unwrap()
+        res_rx.await.unwrap();
+        Ok(id)
     }
 
 

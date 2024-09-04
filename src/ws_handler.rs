@@ -9,6 +9,7 @@ use futures_util::{
     future::{select, Either},
     StreamExt as _,
 };
+use log::log;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::{sync::mpsc, time::interval};
@@ -38,8 +39,14 @@ pub async fn chat_ws(
 
     let (conn_tx, mut conn_rx) = mpsc::unbounded_channel();
 
-    // unwrap: chat server is not dropped before the HTTP server
-    let conn_id = chat_server.connect(conn_tx).await;
+    // 验证客户端密钥
+
+    let conn_id = match chat_server.connect(conn_tx).await{
+        Ok(id) => id,
+        Err(e) => {
+            panic!("密钥错误，断开与客户端的链接");
+        }
+    };
 
     let msg_stream = msg_stream
         .max_frame_size(128 * 1024)
@@ -74,6 +81,7 @@ pub async fn chat_ws(
                     }
 
                     AggregatedMessage::Text(text) => {
+                        println!("{}", &text.trim());
                         process_text_msg(&chat_server, &mut session, &text, conn_id, &mut name)
                             .await;
                     }
@@ -137,7 +145,9 @@ async fn process_text_msg(
     // 修剪掉多余换行符，虽然大概率不需要修剪
     let msg = text.trim();
     println!("{}", msg.clone());
-    let packet_recv: serde_json::Value =  serde_json::from_str(msg).unwrap();
+    let packet_recv = serde_json::from_str(msg).unwrap_or_else(|e| {
+        log::error!("{}", e);
+    });
 
     // 调试
     /*
