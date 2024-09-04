@@ -63,7 +63,6 @@ pub async fn chat_ws(
 
         // TODO: nested select is pretty gross for readability on the match
         let messages = pin!(select(msg_stream.next(), msg_rx));
-
         match select(messages, tick).await {
             // 从客户端接受指令
             Either::Left((Either::Left((Some(Ok(msg)), _)), _)) => {
@@ -81,7 +80,6 @@ pub async fn chat_ws(
                     }
 
                     AggregatedMessage::Text(text) => {
-                        println!("{}", &text.trim());
                         process_text_msg(&chat_server, &mut session, &text, conn_id, &mut name)
                             .await;
                     }
@@ -144,20 +142,25 @@ async fn process_text_msg(
 ) {
     // 修剪掉多余换行符，虽然大概率不需要修剪
     let msg = text.trim();
-    println!("{}", msg.clone());
-    let packet_recv = serde_json::from_str(msg).unwrap_or_else(|e| {
-        log::error!("{}", e);
-    });
+    println!("{}", msg);
+    let packet_recv: Result<serde_json::Value, serde_json::Error> = serde_json::from_str(text);
+    match packet_recv {
+        Ok(json) => {
+            // 通过键来获取值
+            let code = json["code"].as_i64();  // 获取 "code" 的值
+            let key = json["key"].as_str();    // 获取 "key" 的值
 
-    // 调试
-    /*
-    match packet_recv["code"]{
-        Some("0") => {
-            let packet = Packet::Connect { key: packet_recv["key"].to_string() };
-            packet.
+            match (code, key) {
+                (Some(code_val), Some(key_val)) => {
+                    println!("Code: {}", code_val);
+                    println!("Key: {}", key_val);
+                }
+                _ => println!("Failed to get values"),
+            }
         }
-        _ => {}
+        Err(e) => println!("Failed to parse JSON: {}", e),
     }
+    /*
     // unwrap: we have guaranteed non-zero string length already
     match cmd_args.next().unwrap() {
         "/list" => {

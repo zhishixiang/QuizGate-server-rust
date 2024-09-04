@@ -111,7 +111,7 @@ impl WsServerHandle {
         let (res_tx, res_rx) = oneshot::channel();
 
         // 验证客户端密钥
-        println!();
+
         // 密钥错误就断开链接
         // 向服务器注册客户端
         let id = random::<ConnId>();
