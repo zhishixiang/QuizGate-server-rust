@@ -8,7 +8,7 @@ use std::{
 };
 use std::ops::Deref;
 use tokio::sync::{mpsc, oneshot};
-use crate::exam_webserver::{ConnId, Key, PlayerId};
+use crate::{ConnId, Key, PlayerId};
 use rand::{thread_rng, Rng as _, random};
 
 #[derive(Debug)]
@@ -27,7 +27,6 @@ enum Command {
         conn: ConnId,
         res_tx: oneshot::Sender<()>,
     },
-
 }
 
 #[derive(Debug)]
@@ -44,7 +43,7 @@ pub struct WsServer {
 }
 
 impl WsServer {
-    async fn new() -> (Self, ChatServerHandle){
+    pub fn new() -> (Self, WsServerHandle){
         let (cmd_tx,cmd_rx) = mpsc::unbounded_channel();
         (
             WsServer{
@@ -52,7 +51,7 @@ impl WsServer {
                 visitor_count: Arc::new(AtomicUsize::new(0)),
                 cmd_rx
             },
-            ChatServerHandle{
+            WsServerHandle {
                 cmd_tx,
             }
         )
@@ -65,6 +64,18 @@ impl WsServer {
         self.visitor_count.fetch_add(1, Ordering::SeqCst);
         id
     }
+    async fn disconnect(&mut self, conn_id: ConnId) {
+        // 从表中移除链接
+        self.sessions.remove(&conn_id);
+    }
+    async fn add_player(&self, conn_id: ConnId, player_id: PlayerId){
+        for session in self.sessions.clone() {
+            if conn_id.eq(&session.0) {
+                    session.1.send(player_id.clone()).unwrap();
+                }
+            }
+        }
+
     pub async fn run(mut self) -> io::Result<()> {
         while let Some(cmd) = self.cmd_rx.recv().await {
             match cmd {
@@ -79,7 +90,7 @@ impl WsServer {
 
 
                 Command::AddPlayer { conn, id, res_tx} => {
-                    self.send_message(conn, id).await;
+                    self.add_player(conn, id).await;
                     let _ = res_tx.send(());
                 }
             }
@@ -87,13 +98,14 @@ impl WsServer {
 
         Ok(())
     }
+
 }
 #[derive(Debug, Clone)]
-pub struct ChatServerHandle {
+pub struct WsServerHandle {
     cmd_tx: mpsc::UnboundedSender<Command>,
 }
 
-impl ChatServerHandle {
+impl WsServerHandle {
     /// 处理来自客户端的连接
     pub async fn connect(&self, conn_tx: mpsc::UnboundedSender<Key>) -> ConnId {
         let (res_tx, res_rx) = oneshot::channel();
@@ -101,6 +113,8 @@ impl ChatServerHandle {
         // 验证客户端密钥
         todo!();
 
+        // 密钥错误就断开链接
+        todo!();
         // 向服务器注册客户端
         self.cmd_tx
             .send(Command::Connect { conn_tx, res_tx })
@@ -118,7 +132,7 @@ impl ChatServerHandle {
         // 将指令发送到指定的客户端
         self.cmd_tx
             .send(Command::AddPlayer {
-                id: player_id,
+                id: player_id.into(),
                 conn,
                 res_tx,
             })
