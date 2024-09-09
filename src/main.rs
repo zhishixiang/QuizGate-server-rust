@@ -23,6 +23,8 @@ use tokio::{
 mod structs;
 mod ws_handler;
 mod ws_server;
+mod database;
+
 // 连接ID
 pub type ConnId = usize;
 // 客户端发送的验证密钥
@@ -174,31 +176,35 @@ async fn handle_ws_connection(req: HttpRequest,
 // 启动actix服务
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> io::Result<()> {
-    env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
+    if let Ok(sql_pool) = database::new_sql_pool().await {
+        let sql_pool = Arc::new(sql_pool);
 
-    log::info!("starting HTTP server at http://localhost:8080");
+        let (chat_server, server_tx) = WsServer::new(sql_pool);
 
-    let (chat_server, server_tx) = WsServer::new();
+        let chat_server = spawn(chat_server.run());
 
-    let chat_server = spawn(chat_server.run());
+        let server = HttpServer::new(move || {
+            App::new()
+                .app_data(web::Data::new(server_tx.clone()))
+                .service(web::resource("/ws").route(web::get().to(handle_ws_connection)))
+                .service(index)
+                .route("/resources/{filename:.*}", web::get().to(resources))
+                .service(
+                    web::scope("/api")
+                        .route("/get_test/{filename:.*}", web::get().to(get_test))
+                    //.route("/submit", web::post().to(submit))
+                )
+        })
+            .workers(2)
+            .bind("127.0.0.1:8081")
+            .expect("HTTP服务无法绑定端口")
+            .run();
+        env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
 
-    let server = HttpServer::new(move || {
-        App::new()
-            .app_data(web::Data::new(server_tx.clone()))
-            .service(web::resource("/ws").route(web::get().to(handle_ws_connection)))
-            .service(index)
-            .route("/resources/{filename:.*}", web::get().to(resources))
-            .service(
-                web::scope("/api")
-                    .route("/get_test/{filename:.*}", web::get().to(get_test))
-                //.route("/submit", web::post().to(submit))
-            )
-    })
-        .workers(2)
-        .bind("127.0.0.1:8081")
-        .expect("HTTP服务无法绑定端口")
-        .run();
-    println!("HTTP服务启动成功");
-    server.await.expect("HTTP服务意外退出:");
-    Ok(())
+        log::info!("starting HTTP server at http://localhost:8080");
+        server.await.expect("HTTP服务意外退出:");
+        Ok(())
+    } else {
+        panic!("读取数据库失败!")
+    }
 }

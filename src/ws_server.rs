@@ -10,6 +10,8 @@ use std::ops::Deref;
 use tokio::sync::{mpsc, oneshot};
 use crate::{ConnId, Key, PlayerId};
 use rand::{thread_rng, Rng as _, random};
+use sqlx::Sqlite;
+use sqlx_core::pool::Pool;
 
 #[derive(Debug)]
 enum Command {
@@ -40,16 +42,21 @@ pub struct WsServer {
 
     /// 接收命令的管道
     cmd_rx: mpsc::UnboundedReceiver<Command>,
+
+    /// sql命令池
+    sql_pool: Arc<Pool<Sqlite>>
 }
 
 impl WsServer {
-    pub fn new() -> (Self, WsServerHandle){
+    pub fn new(sql_pool:Arc<Pool<Sqlite>>) -> (WsServer, WsServerHandle) {
+
         let (cmd_tx,cmd_rx) = mpsc::unbounded_channel();
         (
             WsServer{
                 sessions: HashMap::new(),
                 visitor_count: Arc::new(AtomicUsize::new(0)),
-                cmd_rx
+                cmd_rx,
+                sql_pool
             },
             WsServerHandle {
                 cmd_tx,
@@ -67,6 +74,13 @@ impl WsServer {
     async fn disconnect(&mut self, conn_id: ConnId) {
         // 从表中移除链接
         self.sessions.remove(&conn_id);
+    }
+    async fn verify(self, key: Key){
+        let result: Result<Option<(String, )>, sqlx::Error> = sqlx::query_as("SELECT name FROM server_info WHERE key = ?")
+            .bind(&key)
+            .fetch_optional(&*self.sql_pool)
+            .await;
+
     }
     async fn add_player(&self, conn_id: ConnId, player_id: PlayerId){
         for session in self.sessions.clone() {

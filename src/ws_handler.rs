@@ -36,17 +36,12 @@ pub async fn chat_ws(
     let mut name = None;
     let mut last_heartbeat = Instant::now();
     let mut interval = interval(HEARTBEAT_INTERVAL);
-
+    // 当前链接是否已验证
+    let mut verified = false;
     let (conn_tx, mut conn_rx) = mpsc::unbounded_channel();
 
-    // 验证客户端密钥
+    let conn_id = chat_server.connect(conn_tx).await.unwrap();
 
-    let conn_id = match chat_server.connect(conn_tx).await{
-        Ok(id) => id,
-        Err(e) => {
-            panic!("密钥错误，断开与客户端的链接");
-        }
-    };
 
     let msg_stream = msg_stream
         .max_frame_size(128 * 1024)
@@ -149,7 +144,7 @@ async fn process_text_msg(
             // 通过键来获取值
             let code = json["code"].as_i64();  // 获取 "code" 的值
             let key = json["key"].as_str();    // 获取 "key" 的值
-
+            /*
             match (code, key) {
                 (Some(code_val), Some(key_val)) => {
                     println!("Code: {}", code_val);
@@ -157,8 +152,12 @@ async fn process_text_msg(
                 }
                 _ => println!("Failed to get values"),
             }
+             */
         }
-        Err(e) => println!("Failed to parse JSON: {}", e),
+        Err(e) => {
+            log::error!("客户端发送了无效的消息:{}",e);
+            session.text("Invalid message").await.unwrap()
+        },
     }
     /*
     // unwrap: we have guaranteed non-zero string length already
