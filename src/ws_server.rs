@@ -91,7 +91,6 @@ impl WsServer {
             .await;
         match result{
             Ok(Some(row)) => {
-                println!("客户端{}上线", row.0);
                 // 将key和connID的键值对插入表
                 self.client_list.insert(key,conn_id);
                 Ok(row.0)
