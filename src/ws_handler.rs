@@ -28,7 +28,7 @@ pub async fn chat_ws(
     mut session: actix_ws::Session,
     msg_stream: actix_ws::MessageStream,
 ) {
-    log::info!("connected");
+    log::info!("新建链接");
 
     let mut name = None;
     let mut last_heartbeat = Instant::now();
@@ -117,12 +117,12 @@ pub async fn chat_ws(
                 // 如果长时间未收到心跳包则断开链接
                 if Instant::now().duration_since(last_heartbeat) > CLIENT_TIMEOUT {
                     log::info!(
-                        "client has not sent heartbeat in over {CLIENT_TIMEOUT:?}; disconnecting"
+                        "客户端{conn_id}在{CLIENT_TIMEOUT:?}秒内未发送心跳包，断开链接"
                     );
                     break None;
                 } else if !verified && Instant::now().duration_since(first_connect) > CLIENT_TIMEOUT {
                     log::info!(
-                        "客户端在{CLIENT_TIMEOUT:?}秒内未进行验证，断开链接"
+                        "{conn_id}在{CLIENT_TIMEOUT:?}秒内未进行验证，断开链接"
                     );
                     break None;
                 }
@@ -136,7 +136,7 @@ pub async fn chat_ws(
     chat_server.disconnect(conn_id);
     // attempt to close connection gracefully
     let _ = session.close(close_reason).await;
-    log::info!("客户端{}断开链接",client_name);
+    log::info!("客户端{}断开链接",conn_id);
 }
 
 async fn process_text_msg(
@@ -154,7 +154,7 @@ async fn process_text_msg(
             let key:Key = json["key"].as_str().unwrap().to_string();    // 获取 "key" 的值
             match chat_server.verify(key.clone(),conn).await {
                 Ok(server_name) => {
-                    log::info!("客户端{}上线",server_name);
+                    log::info!("{}已上线",server_name);
                     (true,server_name)
                 },
                 Err(..) => {
