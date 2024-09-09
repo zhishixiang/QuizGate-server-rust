@@ -1,12 +1,11 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     io,
     sync::{
         atomic::{AtomicUsize, Ordering},
         Arc,
     },
 };
-use std::ops::Deref;
 use tokio::sync::{mpsc, oneshot};
 use crate::{ConnId, Key, PlayerId};
 use rand::{thread_rng, Rng as _, random};
@@ -33,7 +32,7 @@ enum Command {
 
     Verify {
         key:Key,
-        res_tx: oneshot::Sender<(String)>
+        res_tx: oneshot::Sender<(Result<String, Error>)>
     }
 }
 
@@ -132,7 +131,7 @@ impl WsServer {
                 }
 
                 Command::Verify { key, res_tx} => {
-                    let res = self.verify(key).await.unwrap();
+                    let res = self.verify(key).await;
                     let _ = res_tx.send(res);
                 }
             }
@@ -162,7 +161,7 @@ impl WsServerHandle {
     }
 
     /// 验证客户端密钥
-    pub async fn verify(&self,key: Key) -> Result<ConnId, io::Error> {
+    pub async fn verify(&self,key: Key) -> Result<String, Error> {
         let (res_tx, res_rx) = oneshot::channel();
         self.cmd_tx
             .send(Command::Verify {key, res_tx })
@@ -170,7 +169,7 @@ impl WsServerHandle {
 
         // unwrap: chat server does not drop out response channel
         let res = res_rx.await.unwrap();
-        Ok(res.parse().unwrap())
+        res
     }
 
     /// 向特定客户端发送消息

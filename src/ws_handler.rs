@@ -3,19 +3,13 @@ use std::{
     time::{Duration, Instant},
 };
 use std::net::IpAddr;
-use actix_web::http::header::q;
 
 use actix_ws::AggregatedMessage;
 use futures_util::{
     future::{select, Either},
     StreamExt as _,
 };
-use log::log;
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use tokio::{sync::mpsc, time::interval};
-use tokio::sync::oneshot;
-use warp::hyper::client::service::Connect;
 use crate::{ConnId, Key};
 use crate::ws_server::WsServerHandle;
 
@@ -77,7 +71,7 @@ pub async fn chat_ws(
 
                     AggregatedMessage::Text(text) => {
                         // 如果当前客户端未验证就一直处于验证状态
-                        if(!verified){
+                        if !verified {
                             verified = process_text_msg(&chat_server, &mut session, &text, conn_id, &mut name)
                                 .await;
                         }
@@ -147,7 +141,7 @@ async fn process_text_msg(
         Ok(json) => {
             // 通过键来获取值
             let _code = json["code"].as_i64();  // 获取 "code" 的值
-            let key = json["key"].as_str().unwrap().to_string();    // 获取 "key" 的值
+            let key:Key = json["key"].as_str().unwrap().to_string();    // 获取 "key" 的值
             match chat_server.verify(key.clone()).await {
                 Ok(server_name) => {
                     log::info!("客户端{}上线",server_name);

@@ -1,12 +1,10 @@
 use std::fs::File;
 use std::io;
 use std::io::Read;
-use std::ops::Deref;
 use std::path::PathBuf;
 
 use actix_files::NamedFile;
 use actix_web::{App, get, HttpRequest, HttpResponse, HttpServer, Result, web, Error};
-use actix_ws::AggregatedMessage;
 use std::path::Path;
 use std::sync::Arc;
 use futures_util::StreamExt;
@@ -17,7 +15,6 @@ use crate::ws_server::{WsServer, WsServerHandle};
 
 use tokio::{
     task::{spawn, spawn_local},
-    try_join,
 };
 
 mod structs;
@@ -117,18 +114,20 @@ async fn submit(req_body: web::Json<SubmitRequest>, ws_server: web::Data<WsServe
     let mut pass = false;
     // 返回分数和是否及格并直接通知客户端
     // 消息队列真tm难整，先不整了
-    /*
+
     if score >= paper_info["pass"].as_i64().unwrap() {
         pass = true;
+        ws_server.send_message(paper_info["client_key"].to_string(),player_id).await;
+        /*
         for client in client_list.lock().await.deref(){
             if client.client_key == paper_info["client_key"] {
                 client.client_handler.send(player_id.clone()).await.expect("TODO: panic message");
             }
         }
+         */
+    }
 
-     */
         // write_message_to_json_file(Request { client_key: paper_info["client_key"].to_string(), player_id: player_id.to_string() }).expect("写入消息队列失败");
-    ws_server.send_message(paper_info["client_key"].to_string(),player_id).await;
     HttpResponse::Ok().json(SubmitResponse {
         score,
         pass,
