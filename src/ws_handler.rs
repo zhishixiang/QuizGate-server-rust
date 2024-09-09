@@ -120,7 +120,7 @@ pub async fn chat_ws(
                         "client has not sent heartbeat in over {CLIENT_TIMEOUT:?}; disconnecting"
                     );
                     break None;
-                } else if Instant::now().duration_since(first_connect) {
+                } else if Instant::now().duration_since(first_connect) > CLIENT_TIMEOUT {
                     log::info!(
                         "客户端在{CLIENT_TIMEOUT:?}秒内未进行验证，断开链接"
                     );
