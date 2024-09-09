@@ -10,6 +10,7 @@ use futures_util::{
     future::{select, Either},
     StreamExt as _,
 };
+use serde_json::json;
 use tokio::{sync::mpsc, time::interval};
 use crate::{ConnId, Key};
 use crate::ws_server::WsServerHandle;
@@ -98,7 +99,11 @@ pub async fn chat_ws(
 
             // chat messages received from other room participants
             Either::Left((Either::Right((Some(chat_msg), _)), _)) => {
-                session.text(chat_msg).await.unwrap();
+                let template = json!({
+                    "code": "2",
+                    "msg": chat_msg
+                });
+                session.text(template.to_string()).await.unwrap();
             }
 
             // all connection's message senders were dropped
