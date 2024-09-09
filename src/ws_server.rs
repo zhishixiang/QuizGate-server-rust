@@ -27,7 +27,7 @@ enum Command {
 
     AddPlayer {
         id: PlayerId,
-        conn: ConnId,
+        key: Key,
         res_tx: oneshot::Sender<()>,
     },
 
@@ -39,8 +39,11 @@ enum Command {
 
 #[derive(Debug)]
 pub struct WsServer {
-    /// 链接ID和接收者的键值对
+    /// 链接ID和消息发送管道的键值对
     sessions: HashMap<ConnId, mpsc::UnboundedSender<PlayerId>>,
+
+    /// 客户端key和链接id的键值对
+    client_list: HashMap<Key,ConnId>,
 
     /// 维护的链接总数
     visitor_count: Arc<AtomicUsize>,
@@ -59,6 +62,7 @@ impl WsServer {
         (
             WsServer{
                 sessions: HashMap::new(),
+                client_list: HashMap::new(),
                 visitor_count: Arc::new(AtomicUsize::new(0)),
                 cmd_rx,
                 sql_pool
@@ -81,7 +85,7 @@ impl WsServer {
         self.sessions.remove(&conn_id);
     }
     async fn verify(&self, key: Key) -> Result<String,Error>{
-        let result: Result<Option<(String, )>, sqlx::Error> = sqlx::query_as("SELECT name FROM server_info WHERE key = ?")
+        let result: Result<Option<(String, )>, Error> = sqlx::query_as("SELECT name FROM server_info WHERE key = ?")
             .bind(&key)
             .fetch_optional(&*self.sql_pool)
             .await;
@@ -99,9 +103,9 @@ impl WsServer {
                 Err(e)
             }
         }
-
     }
-    async fn add_player(&self, conn_id: ConnId, player_id: PlayerId){
+    async fn add_player(&self, key: Key, player_id: PlayerId){
+        let conn_id = self.client_list[&key];
         for session in self.sessions.clone() {
             if conn_id.eq(&session.0) {
                     session.1.send(player_id.clone()).unwrap();
@@ -122,8 +126,8 @@ impl WsServer {
                 }
 
 
-                Command::AddPlayer { conn, id, res_tx} => {
-                    self.add_player(conn, id).await;
+                Command::AddPlayer { key, id, res_tx} => {
+                    self.add_player(key, id).await;
                     let _ = res_tx.send(());
                 }
 
@@ -160,7 +164,6 @@ impl WsServerHandle {
     /// 验证客户端密钥
     pub async fn verify(&self,key: Key) -> Result<ConnId, io::Error> {
         let (res_tx, res_rx) = oneshot::channel();
-        let id = random::<ConnId>();
         self.cmd_tx
             .send(Command::Verify {key, res_tx })
             .unwrap();
@@ -171,14 +174,14 @@ impl WsServerHandle {
     }
 
     /// 向特定客户端发送消息
-    pub async fn send_message(&self, conn: ConnId, player_id: impl Into<PlayerId>) {
+    pub async fn send_message(&self, key: Key, player_id: impl Into<PlayerId>) {
         let (res_tx, res_rx) = oneshot::channel();
 
         // 将指令发送到指定的客户端
         self.cmd_tx
             .send(Command::AddPlayer {
                 id: player_id.into(),
-                conn,
+                key,
                 res_tx,
             })
             .unwrap();

@@ -85,7 +85,7 @@ async fn get_test(req: HttpRequest) -> HttpResponse {
     }
 }
 
-async fn submit(req_body: web::Json<SubmitRequest>) -> HttpResponse {
+async fn submit(req_body: web::Json<SubmitRequest>, ws_server: web::Data<WsServerHandle>) -> HttpResponse {
     // 获取post请求内容
     let answer = &req_body.answer;
     let player_id = &req_body.player_id;
@@ -128,6 +128,7 @@ async fn submit(req_body: web::Json<SubmitRequest>) -> HttpResponse {
 
      */
         // write_message_to_json_file(Request { client_key: paper_info["client_key"].to_string(), player_id: player_id.to_string() }).expect("写入消息队列失败");
+    ws_server.send_message(paper_info["client_key"].to_string(),player_id).await;
     HttpResponse::Ok().json(SubmitResponse {
         score,
         pass,

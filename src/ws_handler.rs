@@ -149,8 +149,8 @@ async fn process_text_msg(
             let _code = json["code"].as_i64();  // 获取 "code" 的值
             let key = json["key"].as_str().unwrap().to_string();    // 获取 "key" 的值
             match chat_server.verify(key.clone()).await {
-                Ok(String) => {
-                    log::info!("客户端{}上线",String);
+                Ok(server_name) => {
+                    log::info!("客户端{}上线",server_name);
                     true
                 },
                 Err(..) => {
