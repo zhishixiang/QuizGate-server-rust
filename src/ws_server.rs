@@ -6,6 +6,8 @@ use std::{
         Arc,
     },
 };
+use std::collections::VecDeque;
+use tokio::time::{self, Duration};
 use tokio::sync::{mpsc, oneshot};
 use crate::{ConnId, Key, PlayerId};
 use rand::{thread_rng, Rng as _, random};
@@ -52,7 +54,10 @@ pub struct WsServer {
     cmd_rx: mpsc::UnboundedReceiver<Command>,
 
     /// sql命令池
-    sql_pool: Arc<Pool<Sqlite>>
+    sql_pool: Arc<Pool<Sqlite>>,
+
+    /// 缓存中的消息队列
+    pending_messages: HashMap<Key, VecDeque<PlayerId>>,
 }
 
 impl WsServer {
@@ -65,7 +70,8 @@ impl WsServer {
                 client_list: HashMap::new(),
                 visitor_count: Arc::new(AtomicUsize::new(0)),
                 cmd_rx,
-                sql_pool
+                sql_pool,
+                pending_messages: HashMap::new()
             },
             WsServerHandle {
                 cmd_tx,
@@ -105,41 +111,80 @@ impl WsServer {
             }
         }
     }
-    async fn add_player(&self, key: Key, player_id: PlayerId){
-        let conn_id = self.client_list.get(&key).unwrap();
-        for session in self.sessions.clone() {
-            if conn_id.eq(&session.0) {
-                    session.1.send(player_id.clone()).unwrap();
+    async fn add_player(&mut self, key: Key, player_id: PlayerId) {
+        if let Some(conn_id) = self.client_list.get(&key) {
+            if let Some(session) = self.sessions.get(conn_id) {
+                if session.send(player_id.clone()).is_err() {
+                    self.queue_message(key, player_id).await;
+                }
+            } else {
+                self.queue_message(key, player_id).await;
+            }
+        } else {
+            self.queue_message(key, player_id).await;
+        }
+    }
+    async fn process_pending_messages(&mut self) {
+        let mut keys_to_remove = Vec::new();
+
+        for (key, queue) in &mut self.pending_messages {
+            if let Some(conn_id) = self.client_list.get(key) {
+                if let Some(session) = self.sessions.get(conn_id) {
+                    while let Some(player_id) = queue.pop_front() {
+                        if session.send(player_id.clone()).is_err() {
+                            queue.push_front(player_id);
+                            break;
+                        }
+                    }
                 }
             }
+
+            if queue.is_empty() {
+                keys_to_remove.push(key.clone());
+            }
         }
+
+        for key in keys_to_remove {
+            self.pending_messages.remove(&key);
+        }
+    }
+
+    async fn queue_message(&mut self, key: Key, player_id: PlayerId) {
+        self.pending_messages.entry(key).or_default().push_back(player_id);
+    }
 
     pub async fn run(mut self) -> io::Result<()> {
-        while let Some(cmd) = self.cmd_rx.recv().await {
-            match cmd {
-                Command::Connect { conn_tx, res_tx } => {
-                    let conn_id = self.connect(conn_tx).await;
-                    let _ = res_tx.send(conn_id);
+        let mut interval = time::interval(Duration::from_secs(5));
+
+        loop {
+            tokio::select! {
+                Some(cmd) = self.cmd_rx.recv() => {
+                    match cmd {
+                        Command::Connect { conn_tx, res_tx } => {
+                            let conn_id = self.connect(conn_tx).await;
+                            let _ = res_tx.send(conn_id);
+                        }
+
+                        Command::Disconnect { conn } => {
+                            self.disconnect(conn).await;
+                        }
+
+                        Command::AddPlayer { key, id, res_tx } => {
+                            self.add_player(key, id).await;
+                            let _ = res_tx.send(());
+                        }
+
+                        Command::Verify { key, res_tx, conn_id } => {
+                            let res = self.verify(key, conn_id).await;
+                            let _ = res_tx.send(res);
+                        }
+                    }
                 }
-
-                Command::Disconnect { conn } => {
-                    self.disconnect(conn).await;
-                }
-
-
-                Command::AddPlayer { key, id, res_tx} => {
-                    self.add_player(key, id).await;
-                    let _ = res_tx.send(());
-                }
-
-                Command::Verify { key, res_tx,conn_id} => {
-                    let res = self.verify(key,conn_id).await;
-                    let _ = res_tx.send(res);
+                _ = interval.tick() => {
+                    self.process_pending_messages().await;
                 }
             }
         }
-
-        Ok(())
     }
 
 }
