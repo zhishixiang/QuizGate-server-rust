@@ -136,9 +136,6 @@ async fn process_text_msg(
     conn: ConnId,
     name: &mut Option<String>,
 ) -> (bool,String){
-    // 修剪掉多余换行符，虽然大概率不需要修剪
-    let msg = text.trim();
-    println!("{}", msg);
     let packet_recv: Result<serde_json::Value, serde_json::Error> = serde_json::from_str(text);
     match packet_recv {
         Ok(json) => {
