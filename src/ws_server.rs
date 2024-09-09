@@ -11,6 +11,7 @@ use tokio::sync::{mpsc, oneshot};
 use crate::{ConnId, Key, PlayerId};
 use rand::{thread_rng, Rng as _, random};
 use sqlx::Sqlite;
+use sqlx_core::Error;
 use sqlx_core::pool::Pool;
 
 #[derive(Debug)]
@@ -29,13 +30,17 @@ enum Command {
         conn: ConnId,
         res_tx: oneshot::Sender<()>,
     },
+
+    Verify {
+        key:Key,
+        res_tx: oneshot::Sender<(String)>
+    }
 }
 
 #[derive(Debug)]
 pub struct WsServer {
     /// 链接ID和接收者的键值对
     sessions: HashMap<ConnId, mpsc::UnboundedSender<PlayerId>>,
-
 
     /// 维护的链接总数
     visitor_count: Arc<AtomicUsize>,
@@ -75,11 +80,25 @@ impl WsServer {
         // 从表中移除链接
         self.sessions.remove(&conn_id);
     }
-    async fn verify(self, key: Key){
+    async fn verify(&self, key: Key) -> Result<String,Error>{
         let result: Result<Option<(String, )>, sqlx::Error> = sqlx::query_as("SELECT name FROM server_info WHERE key = ?")
             .bind(&key)
             .fetch_optional(&*self.sql_pool)
             .await;
+        match result{
+            Ok(Some(row)) => {
+                println!("客户端{}上线", row.0);
+                Ok(row.0)
+        }
+            Ok(None) => {
+                eprintln!("客户端发送了无效的key，断开链接");
+                Err(Error::RowNotFound)
+            }
+            Err(e) => {
+                log::error!("查询客户端密钥失败:{}",e);
+                Err(e)
+            }
+        }
 
     }
     async fn add_player(&self, conn_id: ConnId, player_id: PlayerId){
@@ -107,6 +126,11 @@ impl WsServer {
                     self.add_player(conn, id).await;
                     let _ = res_tx.send(());
                 }
+
+                Command::Verify { key, res_tx} => {
+                    let res = self.verify(key).await.unwrap();
+                    let _ = res_tx.send(res);
+                }
             }
         }
 
@@ -123,11 +147,6 @@ impl WsServerHandle {
     /// 处理来自客户端的连接
     pub async fn connect(&self, conn_tx: mpsc::UnboundedSender<Key>) -> Result<ConnId, io::Error> {
         let (res_tx, res_rx) = oneshot::channel();
-
-        // 验证客户端密钥
-
-        // 密钥错误就断开链接
-        // 向服务器注册客户端
         let id = random::<ConnId>();
         self.cmd_tx
             .send(Command::Connect { conn_tx, res_tx })
@@ -138,6 +157,18 @@ impl WsServerHandle {
         Ok(id)
     }
 
+    /// 验证客户端密钥
+    pub async fn verify(&self,key: Key) -> Result<ConnId, io::Error> {
+        let (res_tx, res_rx) = oneshot::channel();
+        let id = random::<ConnId>();
+        self.cmd_tx
+            .send(Command::Verify {key, res_tx })
+            .unwrap();
+
+        // unwrap: chat server does not drop out response channel
+        let res = res_rx.await.unwrap();
+        Ok(res.parse().unwrap())
+    }
 
     /// 向特定客户端发送消息
     pub async fn send_message(&self, conn: ConnId, player_id: impl Into<PlayerId>) {

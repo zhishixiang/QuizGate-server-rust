@@ -3,6 +3,7 @@ use std::{
     time::{Duration, Instant},
 };
 use std::net::IpAddr;
+use actix_web::http::header::q;
 
 use actix_ws::AggregatedMessage;
 use futures_util::{
@@ -15,7 +16,7 @@ use serde_json::Value;
 use tokio::{sync::mpsc, time::interval};
 use tokio::sync::oneshot;
 use warp::hyper::client::service::Connect;
-use crate::ConnId;
+use crate::{ConnId, Key};
 use crate::ws_server::WsServerHandle;
 
 /// 心跳包发送频率
@@ -75,8 +76,11 @@ pub async fn chat_ws(
                     }
 
                     AggregatedMessage::Text(text) => {
-                        process_text_msg(&chat_server, &mut session, &text, conn_id, &mut name)
-                            .await;
+                        // 如果当前客户端未验证就一直处于验证状态
+                        if(!verified){
+                            verified = process_text_msg(&chat_server, &mut session, &text, conn_id, &mut name)
+                                .await;
+                        }
                     }
 
                     AggregatedMessage::Binary(_bin) => {
@@ -134,7 +138,7 @@ async fn process_text_msg(
     text: &str,
     conn: ConnId,
     name: &mut Option<String>,
-) {
+) -> bool{
     // 修剪掉多余换行符，虽然大概率不需要修剪
     let msg = text.trim();
     println!("{}", msg);
@@ -142,8 +146,18 @@ async fn process_text_msg(
     match packet_recv {
         Ok(json) => {
             // 通过键来获取值
-            let code = json["code"].as_i64();  // 获取 "code" 的值
-            let key = json["key"].as_str();    // 获取 "key" 的值
+            let _code = json["code"].as_i64();  // 获取 "code" 的值
+            let key = json["key"].as_str().unwrap().to_string();    // 获取 "key" 的值
+            match chat_server.verify(key.clone()).await {
+                Ok(String) => {
+                    log::info!("客户端{}上线",String);
+                    true
+                },
+                Err(..) => {
+                    log::error!("客户端密钥{}无效",key);
+                    false
+                }
+            }
             /*
             match (code, key) {
                 (Some(code_val), Some(key_val)) => {
@@ -156,7 +170,8 @@ async fn process_text_msg(
         }
         Err(e) => {
             log::error!("客户端发送了无效的消息:{}",e);
-            session.text("Invalid message").await.unwrap()
+            session.text("Invalid message").await.unwrap();
+            false
         },
     }
     /*
