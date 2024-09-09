@@ -74,7 +74,7 @@ impl WsServer {
     }
     async fn connect(&mut self, tx: mpsc::UnboundedSender<PlayerId>) -> ConnId{
         // 生成id并插入表
-        let id = 114514;
+        let id = random::<ConnId>();
         self.sessions.insert(id,tx);
         // 计数器+1
         self.visitor_count.fetch_add(1, Ordering::SeqCst);
