@@ -32,6 +32,7 @@ pub async fn chat_ws(
 
     let mut name = None;
     let mut last_heartbeat = Instant::now();
+    let first_connect = Instant::now();
     let mut interval = interval(HEARTBEAT_INTERVAL);
     /// 当前链接是否已验证
     let mut verified = false;
@@ -111,20 +112,23 @@ pub async fn chat_ws(
                 "all connection message senders were dropped; chat server may have panicked"
             ),
 
-            // heartbeat internal tick
+            // 心跳包和验证超时判断
             Either::Right((_inst, _)) => {
-                // if no heartbeat ping/pong received recently, close the connection
+                // 如果长时间未收到心跳包则断开链接
                 if Instant::now().duration_since(last_heartbeat) > CLIENT_TIMEOUT {
                     log::info!(
                         "client has not sent heartbeat in over {CLIENT_TIMEOUT:?}; disconnecting"
                     );
                     break None;
-
+                } else if Instant::now().duration_since(first_connect) {
+                    log::info!(
+                        "客户端在{CLIENT_TIMEOUT:?}秒内未进行验证，断开链接"
+                    );
                 }
 
                 // send heartbeat ping
                 let _ = session.ping(b"").await;
-            }
+            },
         };
     };
 
