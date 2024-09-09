@@ -2,8 +2,6 @@ use std::{
     pin::pin,
     time::{Duration, Instant},
 };
-use std::net::IpAddr;
-use std::ptr::null;
 
 use actix_ws::AggregatedMessage;
 use futures_util::{
@@ -30,14 +28,12 @@ pub async fn chat_ws(
 ) {
     log::info!("新建链接");
 
-    let mut name = None;
     let mut last_heartbeat = Instant::now();
     let first_connect = Instant::now();
     let mut interval = interval(HEARTBEAT_INTERVAL);
-    /// 当前链接是否已验证
+    // 当前链接的验证状态
     let mut verified = false;
-    /// 客户端名
-    let mut client_name:String = "".to_string();
+
     let (conn_tx, mut conn_rx) = mpsc::unbounded_channel();
 
     let conn_id = chat_server.connect(conn_tx).await.unwrap();
@@ -76,7 +72,7 @@ pub async fn chat_ws(
                     AggregatedMessage::Text(text) => {
                         // 如果当前客户端未验证就一直处于验证状态
                         if !verified {
-                            (verified,client_name) = process_text_msg(&chat_server, &mut session, &text, conn_id, &mut name)
+                            verified = process_text_msg(&chat_server, &mut session, &text, conn_id)
                                 .await;
                         }
                     }
@@ -144,8 +140,7 @@ async fn process_text_msg(
     session: &mut actix_ws::Session,
     text: &str,
     conn: ConnId,
-    name: &mut Option<String>,
-) -> (bool,String){
+) -> bool{
     let packet_recv: Result<serde_json::Value, serde_json::Error> = serde_json::from_str(text);
     match packet_recv {
         Ok(json) => {
@@ -155,11 +150,11 @@ async fn process_text_msg(
             match chat_server.verify(key.clone(),conn).await {
                 Ok(server_name) => {
                     log::info!("{}已上线",server_name);
-                    (true,server_name)
+                    true
                 },
                 Err(..) => {
                     log::error!("客户端密钥{}无效",key);
-                    (false, "".to_string())
+                    false
                 }
             }
             /*
@@ -175,7 +170,7 @@ async fn process_text_msg(
         Err(e) => {
             log::error!("客户端发送了无效的消息:{}",e);
             session.text("Invalid message").await.unwrap();
-            (false, "".to_string())
+            false
         },
     }
     /*

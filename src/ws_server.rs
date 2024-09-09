@@ -10,7 +10,7 @@ use std::collections::VecDeque;
 use tokio::time::{self, Duration};
 use tokio::sync::{mpsc, oneshot};
 use crate::{ConnId, Key, PlayerId};
-use rand::{thread_rng, Rng as _, random};
+use rand::random;
 use sqlx::Sqlite;
 use sqlx_core::Error;
 use sqlx_core::pool::Pool;
@@ -35,7 +35,7 @@ enum Command {
     Verify {
         key:Key,
         conn_id:ConnId,
-        res_tx: oneshot::Sender<(Result<String, Error>)>
+        res_tx: oneshot::Sender<Result<String, Error>>
     }
 }
 

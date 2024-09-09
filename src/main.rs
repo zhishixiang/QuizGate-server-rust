@@ -1,3 +1,5 @@
+#![allow(unused_assignments)]
+
 use std::fs::File;
 use std::io;
 use std::io::Read;
@@ -7,7 +9,6 @@ use actix_files::NamedFile;
 use actix_web::{App, get, HttpRequest, HttpResponse, HttpServer, Result, web, Error};
 use std::path::Path;
 use std::sync::Arc;
-use futures_util::StreamExt;
 use serde_json::{json, Value};
 
 pub use crate::structs::submit::{SubmitRequest, SubmitResponse};
@@ -182,7 +183,7 @@ async fn main() -> io::Result<()> {
 
         let (chat_server, server_tx) = WsServer::new(sql_pool);
 
-        let chat_server = spawn(chat_server.run());
+        let _chat_server = spawn(chat_server.run());
 
         let server = HttpServer::new(move || {
             App::new()
