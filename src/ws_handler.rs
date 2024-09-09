@@ -3,6 +3,7 @@ use std::{
     time::{Duration, Instant},
 };
 use std::net::IpAddr;
+use std::ptr::null;
 
 use actix_ws::AggregatedMessage;
 use futures_util::{
@@ -31,8 +32,10 @@ pub async fn chat_ws(
     let mut name = None;
     let mut last_heartbeat = Instant::now();
     let mut interval = interval(HEARTBEAT_INTERVAL);
-    // 当前链接是否已验证
+    /// 当前链接是否已验证
     let mut verified = false;
+    /// 客户端名
+    let mut client_name:String = "".to_string();
     let (conn_tx, mut conn_rx) = mpsc::unbounded_channel();
 
     let conn_id = chat_server.connect(conn_tx).await.unwrap();
@@ -72,7 +75,7 @@ pub async fn chat_ws(
                     AggregatedMessage::Text(text) => {
                         // 如果当前客户端未验证就一直处于验证状态
                         if !verified {
-                            verified = process_text_msg(&chat_server, &mut session, &text, conn_id, &mut name)
+                            (verified,client_name) = process_text_msg(&chat_server, &mut session, &text, conn_id, &mut name)
                                 .await;
                         }
                     }
@@ -121,9 +124,9 @@ pub async fn chat_ws(
     };
 
     chat_server.disconnect(conn_id);
-
     // attempt to close connection gracefully
     let _ = session.close(close_reason).await;
+    log::info!("客户端{}断开链接",client_name);
 }
 
 async fn process_text_msg(
@@ -132,7 +135,7 @@ async fn process_text_msg(
     text: &str,
     conn: ConnId,
     name: &mut Option<String>,
-) -> bool{
+) -> (bool,String){
     // 修剪掉多余换行符，虽然大概率不需要修剪
     let msg = text.trim();
     println!("{}", msg);
@@ -145,11 +148,11 @@ async fn process_text_msg(
             match chat_server.verify(key.clone()).await {
                 Ok(server_name) => {
                     log::info!("客户端{}上线",server_name);
-                    true
+                    (true,server_name)
                 },
                 Err(..) => {
                     log::error!("客户端密钥{}无效",key);
-                    false
+                    (false, "".to_string())
                 }
             }
             /*
@@ -165,7 +168,7 @@ async fn process_text_msg(
         Err(e) => {
             log::error!("客户端发送了无效的消息:{}",e);
             session.text("Invalid message").await.unwrap();
-            false
+            (false, "".to_string())
         },
     }
     /*
