@@ -91,6 +91,10 @@ impl WsServer {
         self.sessions.remove(&conn_id);
     }
     async fn verify(&mut self, key: Key, conn_id:ConnId) -> Result<String,Error>{
+        // 如果当前密钥已注册则断开链接
+        if self.client_list.contains_key(&key) {
+            return Err(Error::RowNotFound)
+        }
         let result: Result<Option<(String, )>, Error> = sqlx::query_as("SELECT name FROM server_info WHERE key = ?")
             .bind(&key)
             .fetch_optional(&*self.sql_pool)
