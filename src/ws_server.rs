@@ -32,6 +32,7 @@ enum Command {
 
     Verify {
         key:Key,
+        conn_id:ConnId,
         res_tx: oneshot::Sender<(Result<String, Error>)>
     }
 }
@@ -73,7 +74,7 @@ impl WsServer {
     }
     async fn connect(&mut self, tx: mpsc::UnboundedSender<PlayerId>) -> ConnId{
         // 生成id并插入表
-        let id = random::<ConnId>();
+        let id = 114514;
         self.sessions.insert(id,tx);
         // 计数器+1
         self.visitor_count.fetch_add(1, Ordering::SeqCst);
@@ -83,7 +84,7 @@ impl WsServer {
         // 从表中移除链接
         self.sessions.remove(&conn_id);
     }
-    async fn verify(&self, key: Key) -> Result<String,Error>{
+    async fn verify(&mut self, key: Key, conn_id:ConnId) -> Result<String,Error>{
         let result: Result<Option<(String, )>, Error> = sqlx::query_as("SELECT name FROM server_info WHERE key = ?")
             .bind(&key)
             .fetch_optional(&*self.sql_pool)
@@ -91,6 +92,8 @@ impl WsServer {
         match result{
             Ok(Some(row)) => {
                 println!("客户端{}上线", row.0);
+                // 将key和connID的键值对插入表
+                self.client_list.insert(key,conn_id);
                 Ok(row.0)
         }
             Ok(None) => {
@@ -104,7 +107,7 @@ impl WsServer {
         }
     }
     async fn add_player(&self, key: Key, player_id: PlayerId){
-        let conn_id = self.client_list[&key];
+        let conn_id = self.client_list.get(&key).unwrap();
         for session in self.sessions.clone() {
             if conn_id.eq(&session.0) {
                     session.1.send(player_id.clone()).unwrap();
@@ -130,8 +133,8 @@ impl WsServer {
                     let _ = res_tx.send(());
                 }
 
-                Command::Verify { key, res_tx} => {
-                    let res = self.verify(key).await;
+                Command::Verify { key, res_tx,conn_id} => {
+                    let res = self.verify(key,conn_id).await;
                     let _ = res_tx.send(res);
                 }
             }
@@ -150,21 +153,19 @@ impl WsServerHandle {
     /// 处理来自客户端的连接
     pub async fn connect(&self, conn_tx: mpsc::UnboundedSender<Key>) -> Result<ConnId, io::Error> {
         let (res_tx, res_rx) = oneshot::channel();
-        let id = random::<ConnId>();
         self.cmd_tx
             .send(Command::Connect { conn_tx, res_tx })
             .unwrap();
 
         // unwrap: chat server does not drop out response channel
-        res_rx.await.unwrap();
-        Ok(id)
+        Ok( res_rx.await.unwrap())
     }
 
     /// 验证客户端密钥
-    pub async fn verify(&self,key: Key) -> Result<String, Error> {
+    pub async fn verify(&self,key: Key, conn_id: ConnId) -> Result<String, Error> {
         let (res_tx, res_rx) = oneshot::channel();
         self.cmd_tx
-            .send(Command::Verify {key, res_tx })
+            .send(Command::Verify {key, conn_id, res_tx })
             .unwrap();
 
         // unwrap: chat server does not drop out response channel

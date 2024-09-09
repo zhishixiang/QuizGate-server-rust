@@ -40,7 +40,6 @@ pub async fn chat_ws(
 
     let conn_id = chat_server.connect(conn_tx).await.unwrap();
 
-
     let msg_stream = msg_stream
         .max_frame_size(128 * 1024)
         .aggregate_continuations()
@@ -115,6 +114,7 @@ pub async fn chat_ws(
                         "client has not sent heartbeat in over {CLIENT_TIMEOUT:?}; disconnecting"
                     );
                     break None;
+
                 }
 
                 // send heartbeat ping
@@ -145,7 +145,7 @@ async fn process_text_msg(
             // 通过键来获取值
             let _code = json["code"].as_i64();  // 获取 "code" 的值
             let key:Key = json["key"].as_str().unwrap().to_string();    // 获取 "key" 的值
-            match chat_server.verify(key.clone()).await {
+            match chat_server.verify(key.clone(),conn).await {
                 Ok(server_name) => {
                     log::info!("客户端{}上线",server_name);
                     (true,server_name)
