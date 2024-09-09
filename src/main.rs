@@ -117,7 +117,8 @@ async fn submit(req_body: web::Json<SubmitRequest>, ws_server: web::Data<WsServe
 
     if score >= paper_info["pass"].as_i64().unwrap() {
         pass = true;
-        ws_server.send_message(paper_info["client_key"].to_string(),player_id).await;
+        let key:Key = paper_info["client_key"].as_str().unwrap().to_string();
+        ws_server.send_message(key,player_id).await;
         /*
         for client in client_list.lock().await.deref(){
             if client.client_key == paper_info["client_key"] {
@@ -192,7 +193,7 @@ async fn main() -> io::Result<()> {
                 .service(
                     web::scope("/api")
                         .route("/get_test/{filename:.*}", web::get().to(get_test))
-                    //.route("/submit", web::post().to(submit))
+                    .route("/submit", web::post().to(submit))
                 )
         })
             .workers(2)
