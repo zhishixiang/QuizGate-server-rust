@@ -3,6 +3,7 @@
 use std::fs::File;
 use std::io;
 use std::io::Read;
+use std::num::ParseIntError;
 use std::path::PathBuf;
 
 use actix_files::NamedFile;
@@ -47,6 +48,11 @@ async fn get_test(req: HttpRequest) -> HttpResponse {
     let mut test_info: Value = json!({});
     let mut path: PathBuf = PathBuf::from("tests/");
     let filename: String = req.match_info().query("filename").parse().unwrap();
+    // 如果get参数不为数字则返回错误
+    match filename.parse::<i32>(){
+        Ok(_) => {}
+        Err(_) => {return HttpResponse::BadRequest().body("Invalid file path")}
+    }
     // 为文件加上后缀名
     path.push(filename + ".json");
     if Path::new(&path).exists() {
