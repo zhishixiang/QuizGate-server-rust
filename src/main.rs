@@ -185,6 +185,7 @@ async fn handle_ws_connection(req: HttpRequest,
 // 启动actix服务
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> io::Result<()> {
+    let address = "127.0.0.1:8081";
     if let Ok(sql_pool) = database::new_sql_pool().await {
         let sql_pool = Arc::new(sql_pool);
 
@@ -205,12 +206,12 @@ async fn main() -> io::Result<()> {
                 )
         })
             .workers(2)
-            .bind("127.0.0.1:8081")
+            .bind(address)
             .expect("HTTP服务无法绑定端口")
             .run();
         env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
 
-        log::info!("starting HTTP server at http://localhost:8080");
+        log::info!("starting HTTP server at http://{address}");
         server.await.expect("HTTP服务意外退出:");
         Ok(())
     } else {
