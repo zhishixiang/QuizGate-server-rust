@@ -48,6 +48,8 @@ pub struct WsServer {
     /// 客户端key和链接id的键值对
     client_list: HashMap<Key,ConnId>,
 
+    /// 链接id和客户端key的键值对
+    client_list_reverse: HashMap<ConnId,Key>,
     /// 维护的链接总数
     visitor_count: Arc<AtomicUsize>,
 
@@ -69,6 +71,7 @@ impl WsServer {
             WsServer{
                 sessions: HashMap::new(),
                 client_list: HashMap::new(),
+                client_list_reverse: HashMap::new(),
                 visitor_count: Arc::new(AtomicUsize::new(0)),
                 cmd_rx,
                 sql_pool,
@@ -90,6 +93,10 @@ impl WsServer {
     async fn disconnect(&mut self, conn_id: ConnId) {
         // 从表中移除链接
         self.sessions.remove(&conn_id);
+        // 获取key和链接id的键值对，如果为空则表示该链接尚未注册，如果有值则从两个表中移除对应键值对
+        if let Some(key) = self.client_list_reverse.remove(&conn_id) {
+                self.client_list.remove(&key);
+        }
     }
     async fn verify(&mut self, key: Key, conn_id:ConnId) -> Result<String,Box<dyn Error + Send + Sync>>{
         // 如果当前密钥已注册则断开链接
@@ -103,7 +110,8 @@ impl WsServer {
         match result{
             Ok(Some(row)) => {
                 // 将key和connID的键值对插入表
-                self.client_list.insert(key,conn_id);
+                self.client_list.insert(key.clone(),conn_id);
+                self.client_list_reverse.insert(conn_id,key);
                 Ok(row.0)
         }
             Ok(None) => {
