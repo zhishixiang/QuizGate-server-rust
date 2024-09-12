@@ -27,6 +27,3 @@ unsafe impl Sync for DuplicateConnectionsError {}
 
 unsafe impl Send for NoSuchKeyError {}
 unsafe impl Sync for NoSuchKeyError {}
-
-unsafe impl Send for ConnectionClosedError {}
-unsafe impl Sync for ConnectionClosedError {}
