@@ -8,9 +8,6 @@ pub struct DuplicateConnectionsError;
 #[derive(Debug)]
 pub struct NoSuchKeyError;
 
-#[derive(Debug)]
-pub struct ConnectionClosedError;
-
 impl Display for NoSuchKeyError {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         write!(f, "客户端提供了一个无效key")
