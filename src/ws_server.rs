@@ -7,13 +7,14 @@ use std::{
     },
 };
 use std::collections::VecDeque;
+use std::error::Error;
 use tokio::time::{self, Duration};
 use tokio::sync::{mpsc, oneshot};
 use crate::{ConnId, Key, PlayerId};
 use rand::random;
 use sqlx::Sqlite;
-use sqlx_core::Error;
 use sqlx_core::pool::Pool;
+use crate::error::{DuplicateConnectionsError, NoSuchKeyError};
 
 #[derive(Debug)]
 enum Command {
@@ -35,7 +36,7 @@ enum Command {
     Verify {
         key:Key,
         conn_id:ConnId,
-        res_tx: oneshot::Sender<Result<String, Error>>
+        res_tx: oneshot::Sender<Result<String, Box<dyn Error + Send + Sync>>>
     }
 }
 
@@ -90,12 +91,12 @@ impl WsServer {
         // 从表中移除链接
         self.sessions.remove(&conn_id);
     }
-    async fn verify(&mut self, key: Key, conn_id:ConnId) -> Result<String,Error>{
+    async fn verify(&mut self, key: Key, conn_id:ConnId) -> Result<String,Box<dyn Error + Send + Sync>>{
         // 如果当前密钥已注册则断开链接
         if self.client_list.contains_key(&key) {
-            return Err(Error::RowNotFound)
+            return Err(DuplicateConnectionsError.into())
         }
-        let result: Result<Option<(String, )>, Error> = sqlx::query_as("SELECT name FROM server_info WHERE key = ?")
+        let result: Result<Option<(String,)>, sqlx::Error> = sqlx::query_as("SELECT name FROM server_info WHERE key = ?")
             .bind(&key)
             .fetch_optional(&*self.sql_pool)
             .await;
@@ -106,12 +107,10 @@ impl WsServer {
                 Ok(row.0)
         }
             Ok(None) => {
-                eprintln!("客户端发送了无效的key，断开链接");
-                Err(Error::RowNotFound)
+                Err(NoSuchKeyError.into())
             }
             Err(e) => {
-                log::error!("查询客户端密钥失败:{}",e);
-                Err(e)
+                Err(Box::new(e))
             }
         }
     }
@@ -210,7 +209,7 @@ impl WsServerHandle {
     }
 
     /// 验证客户端密钥
-    pub async fn verify(&self,key: Key, conn_id: ConnId) -> Result<String, Error> {
+    pub async fn verify(&self, key: Key, conn_id: ConnId) -> Result<String, Box<dyn Error + Send + Sync>> {
         let (res_tx, res_rx) = oneshot::channel();
         self.cmd_tx
             .send(Command::Verify {key, conn_id, res_tx })

@@ -2,8 +2,8 @@ use std::{
     pin::pin,
     time::{Duration, Instant},
 };
-
-use actix_ws::AggregatedMessage;
+use std::error::Error;
+use actix_ws::{AggregatedMessage, Closed};
 use futures_util::{
     future::{select, Either},
     StreamExt as _,
@@ -11,6 +11,7 @@ use futures_util::{
 use serde_json::json;
 use tokio::{sync::mpsc, time::interval};
 use crate::{ConnId, Key};
+use crate::error::{DuplicateConnectionsError, NoSuchKeyError};
 use crate::ws_server::WsServerHandle;
 
 /// 心跳包发送频率
@@ -26,7 +27,6 @@ pub async fn chat_ws(
     mut session: actix_ws::Session,
     msg_stream: actix_ws::MessageStream,
 ) {
-    log::info!("新建链接");
 
     let mut last_heartbeat = Instant::now();
     let first_connect = Instant::now();
@@ -37,7 +37,7 @@ pub async fn chat_ws(
     let (conn_tx, mut conn_rx) = mpsc::unbounded_channel();
 
     let conn_id = chat_server.connect(conn_tx).await.unwrap();
-
+    log::info!("新建链接{}",conn_id);
     let msg_stream = msg_stream
         .max_frame_size(128 * 1024)
         .aggregate_continuations()
@@ -97,7 +97,7 @@ pub async fn chat_ws(
             // chat messages received from other room participants
             Either::Left((Either::Right((Some(chat_msg), _)), _)) => {
                 let template = json!({
-                    "code": "2",
+                    "code": 2,
                     "msg": chat_msg
                 });
                 session.text(template.to_string()).await.unwrap();
@@ -150,12 +150,47 @@ async fn process_text_msg(
             match chat_server.verify(key.clone(),conn).await {
                 Ok(server_name) => {
                     log::info!("{}已上线",server_name);
-                    true
+                    let template = json!({
+                    "code": 1,
+                    "server_name": server_name
+                });
+                    match session.text(template.to_string()).await{
+                        Ok(_) => {true}
+                        Err(e) => {
+                            log::error!("向客户端发送响应失败:{}",e);
+                            false
+                        }
+                    }
+
                 },
-                Err(..) => {
-                    log::error!("客户端密钥{}无效",key);
-                    false
+                Err(e) if e.is::<DuplicateConnectionsError>() => {
+                    log::error!("密钥{}当前已有在线的客户端",key);
+                    let template = json!({
+                        "code": -2,
+                    });
+                    match session.text(template.to_string()).await{
+                        Ok(_) => {false}
+                        Err(e) => {
+                            log::error!("向客户端发送响应失败:{}",e);
+                            false
+                        }
+                    }
                 }
+                Err(e) if e.is::<NoSuchKeyError>() => {
+                    log::error!("客户端密钥{}无效",key);
+                    let template = json!({
+                        "code": -1,
+                    });
+                    match session.text(template.to_string()).await{
+                        Ok(_) => {false}
+                        Err(e) => {
+                            log::error!("向客户端发送响应失败:{}",e);
+                            false
+                        }
+                    }
+                },
+
+                _ => {false}
             }
             /*
             match (code, key) {

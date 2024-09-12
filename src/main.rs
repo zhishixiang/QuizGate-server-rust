@@ -23,6 +23,7 @@ mod structs;
 mod ws_handler;
 mod ws_server;
 mod database;
+mod error;
 
 // 连接ID
 pub type ConnId = u32;
@@ -38,7 +39,7 @@ async fn index() -> Result<NamedFile> {
 // 静态资源
 async fn resources(req: HttpRequest) -> Result<NamedFile> {
     let mut path: PathBuf = PathBuf::from("resources/");
-    let filename: String = req.match_info().query("filename").parse().unwrap();
+    let filename: String = req.match_info().query("filename").parse()?;
     path.push(filename);
     Ok(NamedFile::open(path)?)
 }
