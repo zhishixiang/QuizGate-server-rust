@@ -3,7 +3,6 @@
 use std::fs::File;
 use std::io;
 use std::io::Read;
-use std::num::ParseIntError;
 use std::path::PathBuf;
 
 use actix_files::NamedFile;

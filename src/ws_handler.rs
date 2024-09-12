@@ -2,8 +2,7 @@ use std::{
     pin::pin,
     time::{Duration, Instant},
 };
-use std::error::Error;
-use actix_ws::{AggregatedMessage, Closed};
+use actix_ws::AggregatedMessage;
 use futures_util::{
     future::{select, Either},
     StreamExt as _,
