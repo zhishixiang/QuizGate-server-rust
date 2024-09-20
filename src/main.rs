@@ -17,12 +17,14 @@ use crate::ws_server::{WsServer, WsServerHandle};
 use tokio::{
     task::{spawn, spawn_local},
 };
+use crate::utils::read_file;
 
 mod structs;
 mod ws_handler;
 mod ws_server;
 mod database;
 mod error;
+mod utils;
 
 // 连接ID
 pub type ConnId = u32;
@@ -56,11 +58,10 @@ async fn get_test(req: HttpRequest) -> HttpResponse {
     // 为文件加上后缀名
     path.push(filename + ".json");
     if Path::new(&path).exists() {
-        let mut file = match File::open(&path) {
-            Ok(file) => file,
-            Err(e) => {
-                log::error!("文件打开错误: {}", e);
-                return HttpResponse::InternalServerError().json(json!({"code": 500}));
+        let mut file = match read_file(path.into()) {
+            Ok(value) => value,
+            Err(error) => {
+                return HttpResponse::InternalServerError().json(json!({"code": 500}))
             },
         };
 
@@ -102,9 +103,11 @@ async fn submit(req_body: web::Json<SubmitRequest>, ws_server: web::Data<WsServe
     let mut paper_info: Value = json!({});
     // 检测文件是否存在
     if Path::new(&file_path).exists() {
-        let mut file = match File::open(&file_path) {
-            Ok(file) => file,
-            Err(_) => return HttpResponse::InternalServerError().json(json!({"code": 500})),
+        let mut file = match read_file(&file_path) {
+            Ok(value) => value,
+            Err(error) => {
+                return HttpResponse::InternalServerError().json(json!({"code": 500}))
+            },
         };
         // 从文件读取问卷信息
         let mut contents = String::new();
@@ -145,6 +148,8 @@ async fn submit(req_body: web::Json<SubmitRequest>, ws_server: web::Data<WsServe
     })
 
 }
+
+
 
 // 干得好，我要给你打易佰昏！
 fn mark(answer: &Vec<Value>, paper_info: &Value) -> i64{
