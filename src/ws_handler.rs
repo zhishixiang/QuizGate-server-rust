@@ -190,15 +190,6 @@ async fn process_text_msg(
 
                 _ => {false}
             }
-            /*
-            match (code, key) {
-                (Some(code_val), Some(key_val)) => {
-                    println!("Code: {}", code_val);
-                    println!("Key: {}", key_val);
-                }
-                _ => println!("Failed to get values"),
-            }
-             */
         }
         Err(e) => {
             log::error!("客户端发送了无效的消息:{}",e);
@@ -206,49 +197,4 @@ async fn process_text_msg(
             false
         },
     }
-    /*
-    // unwrap: we have guaranteed non-zero string length already
-    match cmd_args.next().unwrap() {
-        "/list" => {
-            log::info!("conn {conn}: listing rooms");
-
-            let rooms = chat_server.list_rooms().await;
-
-            for room in rooms {
-                session.text(room).await.unwrap();
-            }
-        }
-
-        "/join" => match cmd_args.next() {
-            Some(room) => {
-                log::info!("conn {conn}: joining room {room}");
-
-                chat_server.join_room(conn, room).await;
-
-                session.text(format!("joined {room}")).await.unwrap();
-            }
-
-            None => {
-                session.text("!!! room name is required").await.unwrap();
-            }
-        },
-
-        "/name" => match cmd_args.next() {
-            Some(new_name) => {
-                log::info!("conn {conn}: setting name to: {new_name}");
-                name.replace(new_name.to_owned());
-            }
-            None => {
-                session.text("!!! name is required").await.unwrap();
-            }
-        },
-
-        _ => {
-            session
-                .text(format!("!!! unknown command: {msg}"))
-                .await
-                .unwrap();
-        }
-    }
-     */
 }

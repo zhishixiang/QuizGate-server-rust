@@ -125,23 +125,13 @@ async fn submit(req_body: web::Json<SubmitRequest>, ws_server: web::Data<WsServe
         return HttpResponse::NotFound().json(json!({"code": 404}));
     }
     let mut pass = false;
-    // 返回分数和是否及格并直接通知客户端
-    // 消息队列真tm难整，先不整了
+
 
     if score >= paper_info["pass"].as_i64().unwrap() {
         pass = true;
         let key:Key = paper_info["client_key"].as_str().unwrap().to_string();
         ws_server.send_message(key,player_id).await;
-        /*
-        for client in client_list.lock().await.deref(){
-            if client.client_key == paper_info["client_key"] {
-                client.client_handler.send(player_id.clone()).await.expect("TODO: panic message");
-            }
-        }
-         */
     }
-
-        // write_message_to_json_file(Request { client_key: paper_info["client_key"].to_string(), player_id: player_id.to_string() }).expect("写入消息队列失败");
     HttpResponse::Ok().json(SubmitResponse {
         score,
         pass,
