@@ -1,15 +1,17 @@
 #![allow(unused_assignments)]
 
+use std::fs::File;
 use std::io;
-use std::io::Read;
+use std::io::{Read, Write};
 use std::path::PathBuf;
 
 use actix_files::NamedFile;
 use actix_web::{App, get, HttpRequest, HttpResponse, HttpServer, Result, web, Error};
+use actix_multipart::Multipart;
 use std::path::Path;
 use std::sync::Arc;
+use futures_util::{StreamExt, TryStreamExt};
 use serde_json::{json, Value};
-
 pub use crate::structs::submit::{SubmitRequest, SubmitResponse};
 use crate::ws_server::{WsServer, WsServerHandle};
 
@@ -31,9 +33,12 @@ pub type ConnId = u32;
 pub type Key = String;
 // 通过考试的玩家ID
 pub type PlayerId = String;
-#[get("/{test_id}")]
 async fn index() -> Result<NamedFile> {
     Ok(NamedFile::open(PathBuf::from("templates/exam.html"))?)
+}
+
+async fn upload() -> Result<NamedFile> {
+    Ok(NamedFile::open(PathBuf::from("templates/upload.html"))?)
 }
 
 // 静态资源
@@ -92,6 +97,7 @@ async fn get_test(req: HttpRequest) -> HttpResponse {
     }
 }
 
+// 提交试卷并进行打分
 async fn submit(req_body: web::Json<SubmitRequest>, ws_server: web::Data<WsServerHandle>) -> HttpResponse {
     // 获取post请求内容
     let answer = &req_body.answer;
@@ -139,7 +145,45 @@ async fn submit(req_body: web::Json<SubmitRequest>, ws_server: web::Data<WsServe
 
 }
 
+// 将通过post上传的文件存入tests目录
+async fn upload_file(mut payload: Multipart,ws_server: web::Data<WsServerHandle>) -> HttpResponse {
+    while let Ok(Some(mut field)) = payload.try_next().await {
+        let content_disposition = field.content_disposition();
+        let key:Key = content_disposition.get_filename().unwrap().to_string();
+        let result = ws_server.get_client_id(key).await;
+        match result {
+            Ok(id) => {
+                // 将接收的数据转换为文本
+                let mut text = String::new();
+                while let Some(chunk) = field.next().await {
+                    let data = chunk.unwrap();
+                    text += std::str::from_utf8(&data).unwrap();
+                }
 
+                // 检测内容是否为json格式
+                if let Ok(json) = serde_json::from_str::<Value>(&text) {
+                    // 验证json格式是否正确
+                    if !json.is_object() || !json.as_object().unwrap().contains_key("questions") {
+                        return HttpResponse::BadRequest().json(json!({"code": 400}));
+                    }
+                } else {
+                    return HttpResponse::BadRequest().json(json!({"code": 400}));
+                }
+                // 将试卷数据写入文件
+                let file_path = format!("tests/{}.json", id);
+                let mut file = File::create(file_path).unwrap();
+                while let Some(chunk) = field.next().await {
+                    let data = chunk.unwrap();
+                    file.write_all(&data).unwrap();
+                }
+            }
+            Err(NoSuchKeyError) => {
+                return HttpResponse::Forbidden().json(json!({"code": 403}));
+            }
+        }
+    }
+    HttpResponse::Ok().json(json!({"code": 200}))
+}
 
 // 干得好，我要给你打易佰昏！
 fn mark(answer: &Vec<Value>, paper_info: &Value) -> i64{
@@ -194,11 +238,13 @@ async fn main() -> io::Result<()> {
             App::new()
                 .app_data(web::Data::new(server_tx.clone()))
                 .service(web::resource("/ws").route(web::get().to(handle_ws_connection)))
-                .service(index)
+                .service(web::resource("/upload").route(web::get().to(upload)))
+                .service(web::resource("/{test_id}").route(web::get().to(index)))
                 .route("/resources/{filename:.*}", web::get().to(resources))
                 .service(
                     web::scope("/api")
                         .route("/get_test/{filename:.*}", web::get().to(get_test))
+                        .route("/upload", web::post().to(upload_file))
                     .route("/submit", web::post().to(submit))
                 )
         })

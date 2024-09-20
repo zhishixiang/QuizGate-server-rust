@@ -26,6 +26,8 @@ actix-ws = "0.3.0"
 rand = "0.8.5"
 env_logger = "0.11.3"
 time = "0.3.36"
+actix-multipart = "0.5.0"
+
 [build-dependencies]
 cc = "1.0"
 
