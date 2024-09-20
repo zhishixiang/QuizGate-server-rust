@@ -37,7 +37,13 @@ enum Command {
         key:Key,
         conn_id:ConnId,
         res_tx: oneshot::Sender<Result<String, Box<dyn Error + Send + Sync>>>
+    },
+
+    GetClientID {
+        key:Key,
+        res_tx: oneshot::Sender<Result<u32, Box<dyn Error + Send + Sync>>>
     }
+
 }
 
 #[derive(Debug)]
@@ -163,6 +169,23 @@ impl WsServer {
     async fn queue_message(&mut self, key: Key, player_id: PlayerId) {
         self.pending_messages.entry(key).or_default().push_back(player_id);
     }
+    async fn get_client_id(&self, key: Key) -> Result<u32,Box<dyn Error + Send + Sync>>{
+        let result: Result<Option<(u32,)>, sqlx::Error> = sqlx::query_as("SELECT id FROM server_info WHERE key = ?")
+            .bind(key)
+            .fetch_optional(&*self.sql_pool)
+            .await;
+        match result{
+            Ok(Some(row)) => {
+                Ok(row.0)
+            }
+            Ok(None) => {
+                Err(NoSuchKeyError.into())
+            }
+            Err(e) => {
+                Err(Box::new(e))
+            }
+        }
+    }
 
     pub async fn run(mut self) -> io::Result<()> {
         let mut interval = time::interval(Duration::from_secs(5));
@@ -187,6 +210,11 @@ impl WsServer {
 
                         Command::Verify { key, res_tx, conn_id } => {
                             let res = self.verify(key, conn_id).await;
+                            let _ = res_tx.send(res);
+                        }
+
+                        Command::GetClientID { key, res_tx} => {
+                            let res = self.get_client_id(key).await;
                             let _ = res_tx.send(res);
                         }
                     }
@@ -221,6 +249,18 @@ impl WsServerHandle {
         let (res_tx, res_rx) = oneshot::channel();
         self.cmd_tx
             .send(Command::Verify {key, conn_id, res_tx })
+            .unwrap();
+
+        // unwrap: chat server does not drop out response channel
+        let res = res_rx.await.unwrap();
+        res
+    }
+
+    /// 查询客户端密钥对应的id
+    pub async fn get_client_id(&self, key: Key) -> Result<u32, Box<dyn Error + Send + Sync>> {
+        let (res_tx, res_rx) = oneshot::channel();
+        self.cmd_tx
+            .send(Command::GetClientID {key, res_tx })
             .unwrap();
 
         // unwrap: chat server does not drop out response channel
