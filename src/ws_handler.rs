@@ -114,11 +114,13 @@ pub async fn chat_ws(
                     log::info!(
                         "客户端{conn_id}在{CLIENT_TIMEOUT:?}秒内未发送心跳包，断开链接"
                     );
+                    session.text("Heartbeat timed out, disconnecting").await.unwrap();
                     break None;
                 } else if !verified && Instant::now().duration_since(first_connect) > CLIENT_TIMEOUT {
                     log::info!(
                         "{conn_id}在{CLIENT_TIMEOUT:?}秒内未进行验证，断开链接"
                     );
+                    session.text("Verification timed out, disconnecting").await.unwrap();
                     break None;
                 }
 
