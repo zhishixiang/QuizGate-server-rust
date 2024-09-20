@@ -1,6 +1,5 @@
 #![allow(unused_assignments)]
 
-use std::fs::File;
 use std::io;
 use std::io::Read;
 use std::path::PathBuf;
@@ -48,7 +47,6 @@ async fn resources(req: HttpRequest) -> Result<NamedFile> {
 // 获取试题内容
 async fn get_test(req: HttpRequest) -> HttpResponse {
     let mut test_info: Value = json!({});
-    let mut path: PathBuf = PathBuf::from("tests/");
     let filename: String = req.match_info().query("filename").parse().unwrap();
     // 如果get参数不为数字则返回错误
     match filename.parse::<i32>(){
@@ -56,11 +54,12 @@ async fn get_test(req: HttpRequest) -> HttpResponse {
         Err(_) => {return HttpResponse::BadRequest().body("Invalid file path")}
     }
     // 为文件加上后缀名
-    path.push(filename + ".json");
-    if Path::new(&path).exists() {
-        let mut file = match read_file(path.into()) {
+    let file_path = format!("tests/{}.json", filename);
+    if Path::new(&file_path).exists() {
+        let mut file = match read_file(&file_path) {
             Ok(value) => value,
             Err(error) => {
+                log::error!("读取文件时出现错误：{error}");
                 return HttpResponse::InternalServerError().json(json!({"code": 500}))
             },
         };
@@ -106,6 +105,7 @@ async fn submit(req_body: web::Json<SubmitRequest>, ws_server: web::Data<WsServe
         let mut file = match read_file(&file_path) {
             Ok(value) => value,
             Err(error) => {
+                log::error!("读取文件时出现错误：{error}");
                 return HttpResponse::InternalServerError().json(json!({"code": 500}))
             },
         };
