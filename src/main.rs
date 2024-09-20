@@ -58,7 +58,10 @@ async fn get_test(req: HttpRequest) -> HttpResponse {
     if Path::new(&path).exists() {
         let mut file = match File::open(&path) {
             Ok(file) => file,
-            Err(_) => return HttpResponse::NotFound().json(json!({"code": 404})),
+            Err(e) => {
+                log::error!("文件打开错误: {}", e);
+                return HttpResponse::InternalServerError().json(json!({"code": 500}));
+            },
         };
 
         let mut contents = String::new();
