@@ -5,27 +5,25 @@ use std::io;
 use std::io::{Read, Write};
 use std::path::PathBuf;
 
-use actix_files::NamedFile;
-use actix_web::{App, get, HttpRequest, HttpResponse, HttpServer, Result, web, Error};
-use actix_multipart::Multipart;
-use std::path::Path;
-use std::sync::Arc;
-use futures_util::{StreamExt, TryStreamExt};
-use serde_json::{json, Value};
 pub use crate::structs::submit::{SubmitRequest, SubmitResponse};
 use crate::ws_server::{WsServer, WsServerHandle};
+use actix_files::NamedFile;
+use actix_multipart::Multipart;
+use actix_web::{get, web, App, Error, HttpRequest, HttpResponse, HttpServer, Result};
+use futures_util::{StreamExt, TryStreamExt};
+use serde_json::{json, Value};
+use std::path::Path;
+use std::sync::Arc;
 
-use tokio::{
-    task::{spawn, spawn_local},
-};
 use crate::utils::read_file;
+use tokio::task::{spawn, spawn_local};
 
-mod structs;
-mod ws_handler;
-mod ws_server;
 mod database;
 mod error;
+mod structs;
 mod utils;
+mod ws_handler;
+mod ws_server;
 
 // 连接ID
 pub type ConnId = u32;
@@ -54,9 +52,9 @@ async fn get_test(req: HttpRequest) -> HttpResponse {
     let mut test_info: Value = json!({});
     let filename: String = req.match_info().query("filename").parse().unwrap();
     // 如果get参数不为数字则返回错误
-    match filename.parse::<i32>(){
+    match filename.parse::<i32>() {
         Ok(_) => {}
-        Err(_) => {return HttpResponse::BadRequest().body("Invalid file path")}
+        Err(_) => return HttpResponse::BadRequest().body("Invalid file path"),
     }
     // 为文件加上后缀名
     let file_path = format!("tests/{}.json", filename);
@@ -65,8 +63,8 @@ async fn get_test(req: HttpRequest) -> HttpResponse {
             Ok(value) => value,
             Err(error) => {
                 log::error!("读取文件时出现错误：{error}");
-                return HttpResponse::InternalServerError().json(json!({"code": 500}))
-            },
+                return HttpResponse::InternalServerError().json(json!({"code": 500}));
+            }
         };
 
         let mut contents = String::new();
@@ -98,7 +96,10 @@ async fn get_test(req: HttpRequest) -> HttpResponse {
 }
 
 // 提交试卷并进行打分
-async fn submit(req_body: web::Json<SubmitRequest>, ws_server: web::Data<WsServerHandle>) -> HttpResponse {
+async fn submit(
+    req_body: web::Json<SubmitRequest>,
+    ws_server: web::Data<WsServerHandle>,
+) -> HttpResponse {
     // 获取post请求内容
     let answer = &req_body.answer;
     let player_id = &req_body.player_id;
@@ -112,8 +113,8 @@ async fn submit(req_body: web::Json<SubmitRequest>, ws_server: web::Data<WsServe
             Ok(value) => value,
             Err(error) => {
                 log::error!("读取文件时出现错误：{error}");
-                return HttpResponse::InternalServerError().json(json!({"code": 500}))
-            },
+                return HttpResponse::InternalServerError().json(json!({"code": 500}));
+            }
         };
         // 从文件读取问卷信息
         let mut contents = String::new();
@@ -132,62 +133,57 @@ async fn submit(req_body: web::Json<SubmitRequest>, ws_server: web::Data<WsServe
     }
     let mut pass = false;
 
-
     if score >= paper_info["pass"].as_i64().unwrap() {
         pass = true;
-        let key:Key = paper_info["client_key"].as_str().unwrap().to_string();
-        ws_server.send_message(key,player_id).await;
+        let key: Key = paper_info["client_key"].as_str().unwrap().to_string();
+        ws_server.send_message(key, player_id).await;
     }
-    HttpResponse::Ok().json(SubmitResponse {
-        score,
-        pass,
-    })
-
+    HttpResponse::Ok().json(SubmitResponse { score, pass })
 }
 
 // 将通过post上传的文件存入tests目录
-async fn upload_file(mut payload: Multipart,ws_server: web::Data<WsServerHandle>) -> HttpResponse {
+async fn upload_file(mut payload: Multipart, ws_server: web::Data<WsServerHandle>) -> HttpResponse {
     while let Ok(Some(mut field)) = payload.try_next().await {
         let content_disposition = field.content_disposition();
-        let key:Key = content_disposition.get_filename().unwrap().to_string();
-        let result = ws_server.get_client_id(key).await;
-        match result {
-            Ok(id) => {
-                // 将接收的数据转换为文本
-                let mut text = String::new();
-                while let Some(chunk) = field.next().await {
-                    let data = chunk.unwrap();
-                    text += std::str::from_utf8(&data).unwrap();
-                }
+        // 将接收的数据转换为文本
+        let mut text = String::new();
+        while let Some(chunk) = field.next().await {
+            let data = chunk.unwrap();
+            text += std::str::from_utf8(&data).unwrap();
+        }
 
-                // 检测内容是否为json格式
-                if let Ok(json) = serde_json::from_str::<Value>(&text) {
-                    // 验证json格式是否正确
-                    if !json.is_object() || !json.as_object().unwrap().contains_key("questions") {
-                        return HttpResponse::BadRequest().json(json!({"code": 400}));
+        // 检测内容是否为json格式
+        if let Ok(json) = serde_json::from_str::<Value>(&text) {
+            // 验证json格式是否正确
+            if !json.is_object() || !json.as_object().unwrap().contains_key("questions") {
+                return HttpResponse::BadRequest().json(json!({"code": 400}));
+            }
+            // 读取客户端密钥
+            let key: Key = json["client_key"].as_str().unwrap().to_string();
+            let result = ws_server.get_client_id(key).await;
+            match result {
+                Ok(id) => {
+                    let file_path = format!("tests/{}.json", id);
+                    let mut file = File::create(file_path).unwrap();
+                    while let Some(chunk) = field.next().await {
+                        let data = chunk.unwrap();
+                        file.write_all(&data).unwrap();
                     }
-                } else {
-                    return HttpResponse::BadRequest().json(json!({"code": 400}));
+                    return HttpResponse::Ok().json(json!({"code": 200}));
                 }
-                // 将试卷数据写入文件
-                let file_path = format!("tests/{}.json", id);
-                let mut file = File::create(file_path).unwrap();
-                while let Some(chunk) = field.next().await {
-                    let data = chunk.unwrap();
-                    file.write_all(&data).unwrap();
-                }
+                Err(_) => return HttpResponse::InternalServerError().json(json!({"code": 500})),
             }
-            Err(NoSuchKeyError) => {
-                return HttpResponse::Forbidden().json(json!({"code": 403}));
-            }
+
+        } else {
+            return HttpResponse::BadRequest().json(json!({"code": 400}));
         }
     }
-    HttpResponse::Ok().json(json!({"code": 200}))
+    HttpResponse::InternalServerError().json(json!({"code": 500}))
 }
 
 // 干得好，我要给你打易佰昏！
-fn mark(answer: &Vec<Value>, paper_info: &Value) -> i64{
-    let mut score:i64 = 0;
+fn mark(answer: &Vec<Value>, paper_info: &Value) -> i64 {
+    let mut score: i64 = 0;
     let questions = paper_info["questions"].as_array().unwrap();
     for (i, question) in questions.iter().enumerate() {
         // 多选题
@@ -209,9 +205,10 @@ fn mark(answer: &Vec<Value>, paper_info: &Value) -> i64{
     score
 }
 
-async fn handle_ws_connection(req: HttpRequest,
-                              stream: web::Payload,
-                              ws_server: web::Data<WsServerHandle>,
+async fn handle_ws_connection(
+    req: HttpRequest,
+    stream: web::Payload,
+    ws_server: web::Data<WsServerHandle>,
 ) -> Result<HttpResponse, Error> {
     let (res, session, msg_stream) = actix_ws::handle(&req, stream)?;
     // 新建一个websocket handler
@@ -245,13 +242,13 @@ async fn main() -> io::Result<()> {
                     web::scope("/api")
                         .route("/get_test/{filename:.*}", web::get().to(get_test))
                         .route("/upload", web::post().to(upload_file))
-                    .route("/submit", web::post().to(submit))
+                        .route("/submit", web::post().to(submit)),
                 )
         })
-            .workers(2)
-            .bind(address)
-            .expect("HTTP服务无法绑定端口")
-            .run();
+        .workers(2)
+        .bind(address)
+        .expect("HTTP服务无法绑定端口")
+        .run();
         env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
 
         log::info!("starting HTTP server at http://{address}");
