@@ -9,13 +9,13 @@ pub use crate::structs::submit::{SubmitRequest, SubmitResponse};
 use crate::ws_server::{WsServer, WsServerHandle};
 use actix_files::NamedFile;
 use actix_multipart::Multipart;
-use actix_web::{web, App, Error, HttpRequest, HttpResponse, HttpServer, Result};
+use actix_web::{guard, web, App, Error, HttpRequest, HttpResponse, HttpServer, Result};
 use futures_util::{StreamExt, TryStreamExt};
 use serde_json::{json, Value};
 use std::path::Path;
 use std::sync::Arc;
 
-use crate::utils::read_file;
+use crate::utils::{is_test_id_exist, read_file};
 use tokio::task::{spawn, spawn_local};
 
 mod database;
@@ -235,6 +235,7 @@ async fn main() -> io::Result<()> {
                 .service(web::resource("/ws").route(web::get().to(handle_ws_connection)))
                 .service(web::resource("/upload").route(web::get().to(upload)))
                 .service(web::resource("/").route(web::get().to(index)))
+                .service(web::resource("/{test_id}").route(web::get().to(index)))
                 .route("/resources/{filename:.*}", web::get().to(resources))
                 .service(
                     web::scope("/api")
