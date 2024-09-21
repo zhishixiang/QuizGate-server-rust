@@ -107,12 +107,12 @@
         },
         async mounted() {
             this.paper_id = window.location.pathname;
-            paper_id = this.paper_id
+            paper_id = this.paper_id.slice(1);
             success = true;
             while(success){
                 await axios({
                     method: 'get',
-                    url: '/api/get_test' + paper_id,
+                    url: '/api/get_test/' + paper_id,
                     responseType: 'stream'
                 })
                     .then((response) => {
@@ -133,14 +133,12 @@
                         }else if(data.code == 404) {
                             alert("找不到该问卷id对应的问卷，请确认是否已经上传问卷");
                             paper_id = prompt("请输入要填写的问卷ID：");
-                            paperid = "/" + paper_id;
                         }
                     })
                     .catch(function (error) {
                         console.log(error);
                         alert("获取问卷失败，请联系开发者处理" + error);
                         paper_id = prompt("请输入要填写的问卷ID：");
-                        paperid = "/" + paper_id;
                     })
                 }
         }
