@@ -1,4 +1,4 @@
-{"main_title":"繁星若尘","sub_title":"114514","score":50,"pass":25,"isInGroup":"True","isTest":"False","client_key": "1145141919810","questions":[
+{"main_title":"繁星若尘","sub_title":"大部分问题都可在minecraft.fandom.com找到答案","score":50,"pass":25,"isInGroup":"True","isTest":"False","client_key": "1145141919810","questions":[
     {
         "type":"radio",
         "content":"QQ交流群的群主群备注是什么？",
@@ -16,8 +16,8 @@
     {
         "type":"radio",
         "content":"正版服目前的进服ip是什么？",
-        "options":["mcs.toho.red:21001","origin.reikasakura.com","dx.mckycraft.xyz","都不是"],
-        "correct":1,
+        "options":["mcs.toho.red:21001","home.toho.red","dx.mckycraft.xyz","都不是"],
+        "correct":2,
         "score":2
     },
     {
@@ -169,9 +169,9 @@
     },
     {
         "type":"radio",
-        "content":"一杯500毫升50摄氏度的水倒入一杯250毫升50摄氏度的水，能得到多少摄氏度的水？",
-        "options":["75度","50度","25度","都不对"],
-        "correct":2,
+        "content":"已知破坏一个枯死的灌木会随机掉落0/1/2个木棍，那么获得5根木棍至少需要破坏几个枯死的灌木?",
+        "options":["1","2","3","4"],
+        "correct":4,
         "score":2
     }
 ]}
