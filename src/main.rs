@@ -9,7 +9,7 @@ pub use crate::structs::submit::{SubmitRequest, SubmitResponse};
 use crate::ws_server::{WsServer, WsServerHandle};
 use actix_files::NamedFile;
 use actix_multipart::Multipart;
-use actix_web::{get, web, App, Error, HttpRequest, HttpResponse, HttpServer, Result};
+use actix_web::{web, App, Error, HttpRequest, HttpResponse, HttpServer, Result};
 use futures_util::{StreamExt, TryStreamExt};
 use serde_json::{json, Value};
 use std::path::Path;
@@ -144,7 +144,6 @@ async fn submit(
 // 将通过post上传的文件存入tests目录
 async fn upload_file(mut payload: Multipart, ws_server: web::Data<WsServerHandle>) -> HttpResponse {
     while let Ok(Some(mut field)) = payload.try_next().await {
-        let content_disposition = field.content_disposition();
         // 将接收的数据转换为文本
         let mut text = String::new();
         while let Some(chunk) = field.next().await {
@@ -153,7 +152,7 @@ async fn upload_file(mut payload: Multipart, ws_server: web::Data<WsServerHandle
         }
 
         // 检测内容是否为json格式
-        if let Ok(json) = serde_json::from_str::<Value>(&text) {
+        return if let Ok(json) = serde_json::from_str::<Value>(&text) {
             // 验证json格式是否正确
             if !json.is_object() || !json.as_object().unwrap().contains_key("questions") {
                 return HttpResponse::BadRequest().json(json!({"code": 400}));
@@ -169,13 +168,12 @@ async fn upload_file(mut payload: Multipart, ws_server: web::Data<WsServerHandle
                         let data = chunk.unwrap();
                         file.write_all(&data).unwrap();
                     }
-                    return HttpResponse::Ok().json(json!({"code": 200}));
+                    HttpResponse::Ok().json(json!({"code": 200}))
                 }
-                Err(_) => return HttpResponse::InternalServerError().json(json!({"code": 500})),
+                Err(_) => HttpResponse::InternalServerError().json(json!({"code": 500})),
             }
-
         } else {
-            return HttpResponse::BadRequest().json(json!({"code": 400}));
+            HttpResponse::BadRequest().json(json!({"code": 400}))
         }
     }
     HttpResponse::InternalServerError().json(json!({"code": 500}))
