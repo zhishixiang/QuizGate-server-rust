@@ -236,7 +236,7 @@ async fn main() -> io::Result<()> {
                 .app_data(web::Data::new(server_tx.clone()))
                 .service(web::resource("/ws").route(web::get().to(handle_ws_connection)))
                 .service(web::resource("/upload").route(web::get().to(upload)))
-                .service(web::resource("/{test_id}").route(web::get().to(index)))
+                .service(web::resource("/").route(web::get().to(index)))
                 .route("/resources/{filename:.*}", web::get().to(resources))
                 .service(
                     web::scope("/api")
