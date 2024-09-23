@@ -39,6 +39,9 @@ async fn upload() -> Result<NamedFile> {
     Ok(NamedFile::open(PathBuf::from("templates/upload.html"))?)
 }
 
+async fn register() -> Result<NamedFile> {
+    Ok(NamedFile::open(PathBuf::from("templates/register.html"))?)
+}
 // 静态资源
 async fn resources(req: HttpRequest) -> Result<NamedFile> {
     let mut path: PathBuf = PathBuf::from("resources/");
@@ -212,6 +215,7 @@ async fn main() -> io::Result<()> {
                 .app_data(web::Data::new(server_tx.clone()))
                 .service(web::resource("/ws").route(web::get().to(handle_ws_connection)))
                 .service(web::resource("/upload").route(web::get().to(upload)))
+                .service(web::resource("/register").route(web::get().to(register)))
                 .service(web::resource("/").route(web::get().to(index)))
                 .service(web::resource("/{test_id}").route(web::get().to(index)))
                 .route("/resources/{filename:.*}", web::get().to(resources))
