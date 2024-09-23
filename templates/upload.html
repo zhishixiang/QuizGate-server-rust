@@ -1,24 +1,79 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-    <meta charset="UTF-8">
-    <title>上传问卷</title>
+  <meta charset="UTF-8">
+  <title>上传问卷</title>
+  <link rel="stylesheet" href="https://unpkg.com/mdui@1.0.2/dist/css/mdui.min.css">
+  <link rel="stylesheet" href="/resources/css/upload.css">
 </head>
+
 <body>
-<form action="/api/upload" method="post" enctype="multipart/form-data">
-  <input type="file" name="file"></input>
-  <input type="submit" value="上传"></input>
-</form>
+  <div id="container" class="mdui-container mdui-shadow-12">
+    <div id="drop_zone" class="mdui-center mdui-valign mdui-text-center" ondrop="dropHandler(event)" ondragover="allowDrop(event)">
+      <div id="drop_zone_description" style="margin: auto;">
+        <i class="mdui-icon material-icons" style="font-size: 80px;" onclick="triggerFileInput()">attach_file</i>
+        <p>将问卷文件拖拽至此以进行上传</p>
+        <p>或点击图标手动上传</p>
+      </div>
+      <input type="file" id="file_input" style="display: none;" onchange="fileInputHandler(event)">
+    </div>
+  </div>
 </body>
 <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+<script src="https://unpkg.com/mdui@1.0.2/dist/js/mdui.min.js"></script>
 <script>
-    // 如果文件后缀不为json则弹窗提醒
-    $('form').submit(function(e){
-      var file = $('input[type=file]').val().split('.').pop().toLowerCase();
-      if (file !== 'json') {
+  function triggerFileInput() {
+    document.getElementById('file_input').click();
+  }
+
+  function fileInputHandler(event) {
+    var file = event.target.files[0];
+    if (file) {
+      if (file.name.split('.').pop().toLowerCase() !== 'json') {
         alert('请上传json文件');
-        e.preventDefault();
+      } else {
+        uploadFile(file);
       }
-    })
+    }
+  }
+
+  function dropHandler(ev) {
+    ev.preventDefault();
+    if (ev.dataTransfer.items) {
+      var file = ev.dataTransfer.items[0].getAsFile();
+      if (file) {
+        if (file.name.split('.').pop().toLowerCase() !== 'json') {
+          alert('请上传json文件');
+        } else {
+          uploadFile(file);
+        }
+      }
+    }
+  }
+
+  function allowDrop(ev) {
+    ev.preventDefault();
+  }
+
+  function uploadFile(file) {
+    var formData = new FormData();
+    formData.append('file', file);
+    
+    $.ajax({
+      url: '/api/upload',
+      type: 'POST',
+      data: formData,
+      processData: false,
+      contentType: false,
+      success: function (response) {
+        alert('文件上传成功');
+      },
+      error: function (jqXHR, textStatus, errorMessage) {
+        alert('文件上传失败: ' + errorMessage);
+      }
+    });
+  }
 </script>
+
 </html>
