@@ -1,3 +1,9 @@
+#description h1 {
+    padding-top: 5%;
+    font-weight: 400;
+    font-size: 40px;
+    margin: 0px;
+}
 @media screen and (min-width: 800px) {
     #drop_zone{
         width: 80%;
