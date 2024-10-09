@@ -13,7 +13,7 @@ use tokio::sync::{mpsc, oneshot};
 use rand::random;
 use sqlx::Sqlite;
 use sqlx_core::pool::Pool;
-use crate::{error::{DuplicateConnectionsError, NoSuchKeyError}, structs::awl_type::{ConnId, Key, PlayerId}};
+use crate::{error::{DuplicateConnectionsError, NoSuchValueError}, structs::awl_type::{ConnId, Key, PlayerId}};
 
 #[derive(Debug)]
 enum Command {
@@ -121,7 +121,7 @@ impl WsServer {
                 Ok(row.0)
         }
             Ok(None) => {
-                Err(NoSuchKeyError.into())
+                Err(NoSuchValueError.into())
             }
             Err(e) => {
                 Err(Box::new(e))
@@ -179,7 +179,7 @@ impl WsServer {
                 Ok(row.0)
             }
             Ok(None) => {
-                Err(NoSuchKeyError.into())
+                Err(NoSuchValueError.into())
             }
             Err(e) => {
                 Err(Box::new(e))

@@ -6,12 +6,12 @@ use std::fmt::{Debug, Display, Formatter};
 pub struct DuplicateConnectionsError;
 
 #[derive(Debug)]
-pub struct NoSuchKeyError;
+pub struct NoSuchValueError;
 
 #[derive(Debug)]
 pub struct CreateSqlPoolError;
 
-impl Display for NoSuchKeyError {
+impl Display for NoSuchValueError {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         write!(f, "客户端提供了一个无效key")
     }
@@ -29,14 +29,14 @@ impl Display for CreateSqlPoolError {
     }
 }
 
-impl Error for NoSuchKeyError {}
+impl Error for NoSuchValueError {}
 impl Error for DuplicateConnectionsError {}
 
 unsafe impl Send for DuplicateConnectionsError {}
 unsafe impl Sync for DuplicateConnectionsError {}
 
-unsafe impl Send for NoSuchKeyError {}
-unsafe impl Sync for NoSuchKeyError {}
+unsafe impl Send for NoSuchValueError {}
+unsafe impl Sync for NoSuchValueError {}
 
 unsafe impl Send for CreateSqlPoolError {}
 unsafe impl Sync for CreateSqlPoolError {}

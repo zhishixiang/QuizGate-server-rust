@@ -10,9 +10,10 @@ use crate::ws_server::{WsServer, WsServerHandle};
 use actix_files::NamedFile;
 use actix_multipart::Multipart;
 use actix_web::{web, App, Error, HttpRequest, HttpResponse, HttpServer, Result};
+use database::SqlServer;
 use futures_util::{StreamExt, TryStreamExt};
 use serde_json::{json, Value};
-use structs::awl_type::Key;
+use structs::awl_type::{Key, SqlFile};
 use std::path::Path;
 use std::sync::Arc;
 
@@ -199,16 +200,17 @@ async fn handle_ws_connection(
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> io::Result<()> {
     let address = "127.0.0.1:8081";
-    if let Ok(sql_pool) = database::new_sql_pool().await {
-        let sql_pool = Arc::new(sql_pool);
+    let sql_file:SqlFile = "data.db".to_string();
 
-        let (chat_server, server_tx) = WsServer::new(sql_pool);
+    if let Ok((sql_server,sql_server_tx)) = SqlServer::new(sql_file).await {
 
-        let _chat_server = spawn(chat_server.run());
+        let (ws_server, ws_server_tx) = WsServer::new(sql_server_tx);
+
+        let _ws_server = spawn(ws_server.run());
 
         let server = HttpServer::new(move || {
             App::new()
-                .app_data(web::Data::new(server_tx.clone()))
+                .app_data(web::Data::new(ws_server_tx.clone()))
                 .service(web::resource("/ws").route(web::get().to(handle_ws_connection)))
                 .service(web::resource("/upload").route(web::get().to(upload)))
                 .service(web::resource("/register").route(web::get().to(register)))
