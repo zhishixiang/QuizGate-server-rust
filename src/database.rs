@@ -3,7 +3,7 @@ use tokio::time::{self, Duration};
 use tokio::sync::{mpsc, oneshot};
 use sqlx::{pool::Pool, sqlite::{Sqlite, SqlitePoolOptions}};
 use std::{error::Error, io};
-use crate::{error::NoSuchValueError, structs::awl_type::{SqlFile, SqlStatement}};
+use crate::{error::NoSuchValueError, structs::awl_type::SqlFile};
 
 #[derive(Debug)]
 enum Command {
@@ -20,9 +20,23 @@ pub struct SqlServer {
     /// 接收命令的管道
     cmd_rx: mpsc::UnboundedReceiver<Command>,
 }
-pub struct SqlServerHandle {
-    cmd_tx: mpsc::UnboundedSender<Command>,
+
+#[derive(Debug, Clone)]
+pub struct SqlStatement {
+    pub sql: String,
+    pub params: Vec<String>,
 }
+
+impl SqlStatement {
+    pub fn as_str(&self) -> &str {
+        &self.sql
+    }
+
+    pub fn params(&self) -> &[String] {
+        &self.params
+    }
+}
+
 impl SqlServer {
     pub async fn new(sql_file: SqlFile) -> Result<(SqlServer, SqlServerHandle), Box<dyn Error>> {
         let (cmd_tx, cmd_rx) = mpsc::unbounded_channel();
@@ -92,5 +106,20 @@ impl SqlServer {
                 }
             }
         }
+    }
+}
+#[derive(Debug, Clone)]
+pub struct SqlServerHandle {
+    cmd_tx: mpsc::UnboundedSender<Command>,
+}
+impl SqlServerHandle {
+    pub async fn execute(&self,sql_statement:SqlStatement) -> Result<String, Box<dyn Error>>{
+        let (res_tx, res_rx) = oneshot::channel();
+        self.cmd_tx
+            .send(Command::Execute { sql_statement, res_tx })
+            .unwrap();
+
+        // unwrap: chat server does not drop out response channel
+        res_rx.await.unwrap()
     }
 }

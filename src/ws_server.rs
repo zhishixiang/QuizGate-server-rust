@@ -13,7 +13,7 @@ use tokio::sync::{mpsc, oneshot};
 use rand::random;
 use sqlx::Sqlite;
 use sqlx_core::pool::Pool;
-use crate::{error::{DuplicateConnectionsError, NoSuchValueError}, structs::awl_type::{ConnId, Key, PlayerId}};
+use crate::{database::{SqlServerHandle, SqlStatement}, error::{DuplicateConnectionsError, NoSuchValueError}, structs::awl_type::{ConnId, Key, PlayerId}};
 
 #[derive(Debug)]
 enum Command {
@@ -63,14 +63,14 @@ pub struct WsServer {
     cmd_rx: mpsc::UnboundedReceiver<Command>,
 
     /// sql命令池
-    sql_pool: Arc<Pool<Sqlite>>,
+    sql_handler: SqlServerHandle,
 
     /// 缓存中的消息队列
     pending_messages: HashMap<Key, VecDeque<PlayerId>>,
 }
 
 impl WsServer {
-    pub fn new(sql_pool:Arc<Pool<Sqlite>>) -> (WsServer, WsServerHandle) {
+    pub fn new(sql_handler:SqlServerHandle) -> (WsServer, WsServerHandle) {
 
         let (cmd_tx,cmd_rx) = mpsc::unbounded_channel();
         (
@@ -80,7 +80,7 @@ impl WsServer {
                 client_list_reverse: HashMap::new(),
                 visitor_count: Arc::new(AtomicUsize::new(0)),
                 cmd_rx,
-                sql_pool,
+                sql_handler,
                 pending_messages: HashMap::new()
             },
             WsServerHandle {
@@ -109,10 +109,11 @@ impl WsServer {
         if self.client_list.contains_key(&key) {
             return Err(DuplicateConnectionsError.into())
         }
-        let result: Result<Option<(String,)>, sqlx::Error> = sqlx::query_as("SELECT name FROM server_info WHERE key = ?")
-            .bind(&key)
-            .fetch_optional(&*self.sql_pool)
-            .await;
+        let sql_statement = SqlStatement{
+            sql:"SELECT name FROM server_info WHERE key =".to_string(),
+            params:[key].to_vec()
+        };
+        let result = self.sql_handler.
         match result{
             Ok(Some(row)) => {
                 // 将key和connID的键值对插入表
