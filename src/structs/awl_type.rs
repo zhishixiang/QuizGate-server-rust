@@ -4,3 +4,7 @@ pub type ConnId = u32;
 pub type Key = String;
 // 通过考试的玩家ID
 pub type PlayerId = String;
+// 等待执行的sql语句
+pub type SqlStatement = String;
+// 准备连接的db文件
+pub type SqlFile = String;
