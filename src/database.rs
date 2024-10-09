@@ -1,6 +1,30 @@
+use tokio::sync::{mpsc, oneshot};
 use sqlx_core::Error;
 use sqlx::{pool::Pool, sqlite::{Sqlite, SqlitePoolOptions}};
 
+use crate::error::CreateSqlPoolError;
+
+#[derive(Debug)]
+enum Command {
+    Connect {
+        conn_tx: mpsc::UnboundedSender<String>,
+        res_tx: oneshot::Sender<CreateSqlPoolError>,
+    },
+    Execute {
+        conn_tx: mpsc::UnboundedSender<Key>,
+        res_tx: oneshot::Sender<ConnId>,
+    }
+}
+
+pub struct SqlServer{
+    // sql连接池
+    pool: Pool<Sqlite>,
+    
+    /// 接收命令的管道
+    cmd_rx: mpsc::UnboundedReceiver<Command>,
+
+    
+}
 pub async fn new_sql_pool() -> Result<Pool<Sqlite>, Error> {
     // 创建一个连接池
     let pool = SqlitePoolOptions::new()

@@ -12,6 +12,7 @@ use actix_multipart::Multipart;
 use actix_web::{web, App, Error, HttpRequest, HttpResponse, HttpServer, Result};
 use futures_util::{StreamExt, TryStreamExt};
 use serde_json::{json, Value};
+use structs::awl_type::Key;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -25,12 +26,7 @@ mod utils;
 mod ws_handler;
 mod ws_server;
 
-// 连接ID
-pub type ConnId = u32;
-// 客户端发送的验证密钥
-pub type Key = String;
-// 通过考试的玩家ID
-pub type PlayerId = String;
+
 async fn index() -> Result<NamedFile> {
     Ok(NamedFile::open(PathBuf::from("templates/exam.html"))?)
 }

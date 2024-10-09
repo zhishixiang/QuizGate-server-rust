@@ -10,11 +10,10 @@ use std::collections::VecDeque;
 use std::error::Error;
 use tokio::time::{self, Duration};
 use tokio::sync::{mpsc, oneshot};
-use crate::{ConnId, Key, PlayerId};
 use rand::random;
 use sqlx::Sqlite;
 use sqlx_core::pool::Pool;
-use crate::error::{DuplicateConnectionsError, NoSuchKeyError};
+use crate::{error::{DuplicateConnectionsError, NoSuchKeyError}, structs::awl_type::{ConnId, Key, PlayerId}};
 
 #[derive(Debug)]
 enum Command {
@@ -56,6 +55,7 @@ pub struct WsServer {
 
     /// 链接id和客户端key的键值对
     client_list_reverse: HashMap<ConnId,Key>,
+
     /// 维护的链接总数
     visitor_count: Arc<AtomicUsize>,
 
