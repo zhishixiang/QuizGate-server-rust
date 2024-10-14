@@ -181,11 +181,18 @@ async fn upload(mut payload: Multipart, ws_server: web::Data<WsServerHandle>) ->
 }
 
 // 提交注册信息
-async fn register(req_body: web::Json<RegisterRequest>){
+async fn register_pending(req_body: web::Json<RegisterRequest>) -> HttpResponse{
     let email = &req_body.email;
     let server_name = &req_body.server_name;
     let cf_token = &req_body.cf_token;
-    todo!()
+
+    let params = [("secret", "0x4AAAAAAAknWFphfuuJpHT-LlKElecM02U"), ("response", cf_token)];
+    let client = reqwest::Client::new();
+    let res = client.post("https://challenges.cloudflare.com/turnstile/v0/siteverify")
+        .form(&params)
+        .send()
+        .await;
+    HttpResponse::Ok().json(json!({"code": 200}))
 }
 
 async fn handle_ws_connection(
@@ -229,7 +236,7 @@ async fn main() -> io::Result<()> {
                         .route("/get_test/{filename:.*}", web::get().to(get_test))
                         .route("/upload", web::post().to(upload))
                         .route("/submit", web::post().to(submit))
-                        .route("/register",web::post().to(register))
+                        .route("/register", web::post().to(register_pending)),
                 )
         })
         .workers(2)

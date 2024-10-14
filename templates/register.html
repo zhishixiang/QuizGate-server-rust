@@ -40,6 +40,8 @@
 </body>
 <script src="https://unpkg.com/mdui@1.0.2/dist/js/mdui.min.js"></script>
 <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+<script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+
 <script>
     document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('clearButton').addEventListener('click', function() {
@@ -64,26 +66,22 @@
                 return;
             }
 
-            // 创建 FormData 对象
-            var formData = new FormData();
-            formData.append('email', email);
-            formData.append('server_name', serverName);
-            formData.append('cf_token', turnstileResponse);
 
             // 提交注册信息
-            var xhr = new XMLHttpRequest();
-            xhr.open('POST', '/register', true); // 替换成实际的提交URL
-            xhr.onreadystatechange = function() {
-                if (xhr.readyState === XMLHttpRequest.DONE) {
-                    if (xhr.status === 200) {
-                        mdui.alert('注册成功', '成功');
-                    } else {
-                        mdui.alert('注册失败，请重试', '错误');
-                    }
-                }
-            };
-            xhr.send(formData);
-        });
+            axios.post('/api/register', {
+                email: email,
+                server_name: serverName,
+                cf_token: turnstileResponse
+            })
+
+                .then(function (response) {
+                    mdui.alert("提交成功，您的分数是" + JSON.parse(response.data.score) + "分\n答题信息："+"\n玩家id:"+this.player_id+"\n答题时间戳:"+Date.now()+"\n是否及格:"+response.data.pass)
+                    location.reload()
+                })
+                .catch(function (error) {
+                    console.log(error);
+                    mdui.alert("提交失败，请联系开发者处理" + error)
+                });
     });
 
     function javascriptCallback(token) {
@@ -93,6 +91,7 @@
         input.value = token;
         document.getElementById('input-bar').appendChild(input);
     }
+    });
 </script>
 
 </html>

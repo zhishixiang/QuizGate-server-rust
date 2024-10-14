@@ -15,7 +15,7 @@ pub struct SubmitResponse {
     pub(crate) pass: bool,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize,Debug)]
 pub struct RegisterRequest {
     pub(crate) email: String,
     pub(crate) server_name: String,
