@@ -179,7 +179,10 @@ async fn upload(mut payload: Multipart, ws_server: web::Data<WsServerHandle>) ->
     HttpResponse::InternalServerError().json(json!({"code": 500}))
 }
 
-
+// 提交注册信息
+async fn register(){
+    todo!()
+}
 
 async fn handle_ws_connection(
     req: HttpRequest,
@@ -221,7 +224,8 @@ async fn main() -> io::Result<()> {
                     web::scope("/api")
                         .route("/get_test/{filename:.*}", web::get().to(get_test))
                         .route("/upload", web::post().to(upload))
-                        .route("/submit", web::post().to(submit)),
+                        .route("/submit", web::post().to(submit))
+                        .route("/register",web::post().to(register))
                 )
         })
         .workers(2)
