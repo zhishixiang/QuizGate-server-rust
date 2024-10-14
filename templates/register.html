@@ -2,14 +2,14 @@
 <html lang="zh-CN">
 
 <head>
-  <meta charset="UTF-8">
-  <title>注册</title>
-  <link rel="stylesheet" href="https://unpkg.com/mdui@1.0.2/dist/css/mdui.min.css">
-  <link rel="stylesheet" href="/resources/css/register.css">
+    <meta charset="UTF-8">
+    <title>注册</title>
+    <link rel="stylesheet" href="https://unpkg.com/mdui@1.0.2/dist/css/mdui.min.css">
+    <link rel="stylesheet" href="/resources/css/register.css">
 </head>
 
 <body>
-  <div id="container" class="mdui-container mdui-shadow-12">
+<div id="container" class="mdui-container mdui-shadow-12">
     <div id="description" class="mdui-row">
         <h1 class="mdui-text-center mdui-col-xs-12">
             客户端注册
@@ -18,25 +18,81 @@
     <div id="input-bar">
         <div class="mdui-textfield mdui-textfield-floating-label mdui-row mdui-col-xs-12">
             <label class="mdui-textfield-label">电子邮箱</label>
-            <input class="mdui-textfield-input" type="email" required />
+            <input id="email" class="mdui-textfield-input" type="email" required />
             <div class="mdui-textfield-error">邮箱格式错误</div>
         </div>
         <div class="mdui-textfield mdui-textfield-floating-label mdui-row mdui-col-xs-12">
             <label class="mdui-textfield-label">服务器名</label>
-            <input class="mdui-textfield-input" type="text" required />
+            <input id="servername" class="mdui-textfield-input" type="text" required />
             <div class="mdui-textfield-error">服务器名不能为空</div>
         </div>
+        <div
+                class="cf-turnstile"
+                data-sitekey="0x4AAAAAAAknWA8vGmV7UUkE"
+                data-callback="javascriptCallback"
+        ></div>
         <div class="mdui-row mdui-col-xs-12">
-          <button class="mdui-btn mdui-ripple">button</button>
-          <button class="mdui-btn mdui-color-theme-accent mdui-ripple">button</button>
+            <button id="clearButton" class="mdui-btn mdui-ripple">清空</button>
+            <button id="submitButton" class="mdui-btn mdui-color-theme-accent mdui-ripple">提交</button>
         </div>
     </div>
-  </div>
+</div>
 </body>
-<script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
 <script src="https://unpkg.com/mdui@1.0.2/dist/js/mdui.min.js"></script>
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
 <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        document.getElementById('clearButton').addEventListener('click', function() {
+            document.getElementById('email').value = '';
+            document.getElementById('servername').value = '';
+        });
 
+        document.getElementById('submitButton').addEventListener('click', function(event) {
+            event.preventDefault();
+
+            var serverName = document.getElementById('servername').value;
+            if (serverName.length > 20) {
+                mdui.alert('服务器名过长，请重新输入', '错误');
+                return;
+            }
+
+            var email = document.getElementById('email').value;
+            var turnstileResponse = document.querySelector('input[name="cf-turnstile-response"]').value;
+
+            if (!turnstileResponse) {
+                mdui.alert('请完成验证码', '错误');
+                return;
+            }
+
+            // 创建 FormData 对象
+            var formData = new FormData();
+            formData.append('email', email);
+            formData.append('servername', serverName);
+            formData.append('cf-turnstile-response', turnstileResponse);
+
+            // 提交注册信息
+            var xhr = new XMLHttpRequest();
+            xhr.open('POST', '/register', true); // 替换成实际的提交URL
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState === XMLHttpRequest.DONE) {
+                    if (xhr.status === 200) {
+                        mdui.alert('注册成功', '成功');
+                    } else {
+                        mdui.alert('注册失败，请重试', '错误');
+                    }
+                }
+            };
+            xhr.send(formData);
+        });
+    });
+
+    function javascriptCallback(token) {
+        var input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'cf-turnstile-response';
+        input.value = token;
+        document.getElementById('input-bar').appendChild(input);
+    }
 </script>
 
 </html>
