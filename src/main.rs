@@ -32,11 +32,11 @@ async fn index() -> Result<NamedFile> {
     Ok(NamedFile::open(PathBuf::from("templates/exam.html"))?)
 }
 
-async fn upload() -> Result<NamedFile> {
+async fn upload_page() -> Result<NamedFile> {
     Ok(NamedFile::open(PathBuf::from("templates/upload.html"))?)
 }
 
-async fn register() -> Result<NamedFile> {
+async fn register_page() -> Result<NamedFile> {
     Ok(NamedFile::open(PathBuf::from("templates/register.html"))?)
 }
 // 静态资源
@@ -142,7 +142,7 @@ async fn submit(
 }
 
 // 将通过post上传的文件存入tests目录
-async fn upload_file(mut payload: Multipart, ws_server: web::Data<WsServerHandle>) -> HttpResponse {
+async fn upload(mut payload: Multipart, ws_server: web::Data<WsServerHandle>) -> HttpResponse {
     while let Ok(Some(mut field)) = payload.try_next().await {
         // 将接收的数据转换为文本
         let mut text = String::new();
@@ -212,15 +212,15 @@ async fn main() -> io::Result<()> {
             App::new()
                 .app_data(web::Data::new(ws_server_tx.clone()))
                 .service(web::resource("/ws").route(web::get().to(handle_ws_connection)))
-                .service(web::resource("/upload").route(web::get().to(upload)))
-                .service(web::resource("/register").route(web::get().to(register)))
+                .service(web::resource("/upload").route(web::get().to(upload_page)))
+                .service(web::resource("/register").route(web::get().to(register_page)))
                 .service(web::resource("/").route(web::get().to(index)))
                 .service(web::resource("/{test_id}").route(web::get().to(index)))
                 .route("/resources/{filename:.*}", web::get().to(resources))
                 .service(
                     web::scope("/api")
                         .route("/get_test/{filename:.*}", web::get().to(get_test))
-                        .route("/upload", web::post().to(upload_file))
+                        .route("/upload", web::post().to(upload))
                         .route("/submit", web::post().to(submit)),
                 )
         })
