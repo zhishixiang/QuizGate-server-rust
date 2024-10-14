@@ -14,3 +14,10 @@ pub struct SubmitResponse {
     pub(crate) score: i64,
     pub(crate) pass: bool,
 }
+
+#[derive(Deserialize)]
+pub struct RegisterRequest {
+    pub(crate) email: String,
+    pub(crate) server_name: String,
+    pub(crate) cf_token: String,
+}

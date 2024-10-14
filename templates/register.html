@@ -67,8 +67,8 @@
             // 创建 FormData 对象
             var formData = new FormData();
             formData.append('email', email);
-            formData.append('servername', serverName);
-            formData.append('cf-turnstile-response', turnstileResponse);
+            formData.append('server_name', serverName);
+            formData.append('cf_token', turnstileResponse);
 
             // 提交注册信息
             var xhr = new XMLHttpRequest();

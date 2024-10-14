@@ -19,6 +19,7 @@ use std::sync::Arc;
 
 use crate::utils::{mark, read_file};
 use tokio::task::{spawn, spawn_local};
+use crate::structs::submit::RegisterRequest;
 
 mod database;
 mod error;
@@ -180,7 +181,10 @@ async fn upload(mut payload: Multipart, ws_server: web::Data<WsServerHandle>) ->
 }
 
 // 提交注册信息
-async fn register(){
+async fn register(req_body: web::Json<RegisterRequest>){
+    let email = &req_body.email;
+    let server_name = &req_body.server_name;
+    let cf_token = &req_body.cf_token;
     todo!()
 }
 
