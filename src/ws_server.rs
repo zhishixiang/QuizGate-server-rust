@@ -110,22 +110,19 @@ impl WsServer {
             return Err(DuplicateConnectionsError.into())
         }
         let sql_statement = SqlStatement{
-            sql:"SELECT name FROM server_info WHERE key =".to_string(),
-            params:[key].to_vec()
+            sql:"SELECT name FROM server_info WHERE key = ?".to_string(),
+            params:[key.clone()].to_vec()
         };
-        let result = self.sql_handler.
-        match result{
-            Ok(Some(row)) => {
+        let result = self.sql_handler.execute(sql_statement).await;
+        match result {
+            Ok(row) => {
                 // 将key和connID的键值对插入表
                 self.client_list.insert(key.clone(),conn_id);
                 self.client_list_reverse.insert(conn_id,key);
-                Ok(row.0)
+                Ok(row)
         }
-            Ok(None) => {
-                Err(NoSuchValueError.into())
-            }
             Err(e) => {
-                Err(Box::new(e))
+                Err(e)
             }
         }
     }
@@ -171,19 +168,17 @@ impl WsServer {
         self.pending_messages.entry(key).or_default().push_back(player_id);
     }
     async fn get_client_id(&self, key: Key) -> Result<u32,Box<dyn Error + Send + Sync>>{
-        let result: Result<Option<(u32,)>, sqlx::Error> = sqlx::query_as("SELECT id FROM server_info WHERE key = ?")
-            .bind(key)
-            .fetch_optional(&*self.sql_pool)
-            .await;
+        let sql_statement = SqlStatement{
+            sql:"SELECT id FROM server_info WHERE key = ?".to_string(),
+            params:[key.clone()].to_vec()
+        };
+        let result= self.sql_handler.execute(sql_statement).await;
         match result{
-            Ok(Some(row)) => {
-                Ok(row.0)
-            }
-            Ok(None) => {
-                Err(NoSuchValueError.into())
+            Ok(row) => {
+                Ok(row.parse().unwrap())
             }
             Err(e) => {
-                Err(Box::new(e))
+                Err(e)
             }
         }
     }

@@ -9,8 +9,8 @@ use futures_util::{
 };
 use serde_json::json;
 use tokio::{sync::mpsc, time::interval};
-use crate::{ConnId, Key};
-use crate::error::{DuplicateConnectionsError, NoSuchKeyError};
+use crate::error::{DuplicateConnectionsError, NoSuchValueError};
+use crate::structs::awl_type::{ConnId, Key};
 use crate::ws_server::WsServerHandle;
 
 /// 心跳包发送频率
@@ -176,7 +176,7 @@ async fn process_text_msg(
                         }
                     }
                 }
-                Err(e) if e.is::<NoSuchKeyError>() => {
+                Err(e) if e.is::<NoSuchValueError>() => {
                     log::error!("客户端密钥{}无效",key);
                     let template = json!({
                         "code": -1,

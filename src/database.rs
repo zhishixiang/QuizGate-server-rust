@@ -9,7 +9,7 @@ use crate::{error::NoSuchValueError, structs::awl_type::SqlFile};
 enum Command {
     Execute {
         sql_statement: SqlStatement,
-        res_tx: oneshot::Sender<Result<String, Box<dyn Error>>>,
+        res_tx: oneshot::Sender<Result<String, Box<dyn Error + Send + Sync>>>,
     }
 }
 
@@ -77,7 +77,7 @@ impl SqlServer {
         ))
     }
 
-    pub async fn execute_statement(&mut self, sql_statement: SqlStatement) -> Result<String, Box<dyn Error>> {
+    pub async fn execute_statement(&mut self, sql_statement: SqlStatement) -> Result<String, Box<dyn Error + Send + Sync>> {
         let result: Result<Option<(String,)>, sqlx::Error> = sqlx::query_as(sql_statement.as_str())
             .fetch_optional(&self.pool)
             .await;
@@ -113,7 +113,7 @@ pub struct SqlServerHandle {
     cmd_tx: mpsc::UnboundedSender<Command>,
 }
 impl SqlServerHandle {
-    pub async fn execute(&self,sql_statement:SqlStatement) -> Result<String, Box<dyn Error>>{
+    pub async fn execute(&self,sql_statement:SqlStatement) -> Result<String, Box<dyn Error + Send + Sync>>{
         let (res_tx, res_rx) = oneshot::channel();
         self.cmd_tx
             .send(Command::Execute { sql_statement, res_tx })
