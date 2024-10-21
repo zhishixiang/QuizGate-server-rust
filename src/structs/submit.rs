@@ -20,14 +20,14 @@ pub struct SubmitResponse {
 pub struct RegisterRequest {
     pub(crate) email: String,
     pub(crate) server_name: String,
-    pub(crate) cf_token: String,
+    pub(crate) captcha_token: String,
 }
 
 #[derive(Deserialize, Debug)]
-pub struct TurnstileResponse {
+pub struct CaptchaResponse {
     pub(crate) success: bool,
     #[serde(rename = "error-codes")]
-    error_codes: Option<Vec<String>>,
+    pub(crate) error_codes: Option<Vec<String>>,
     pub(crate) challenge_ts: String,
 
 }

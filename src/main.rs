@@ -21,7 +21,7 @@ use reqwest::Response;
 use crate::utils::{mark, read_file};
 use tokio::task::{spawn, spawn_local};
 use crate::email_server::{EmailServer, EmailServerHandle};
-use crate::structs::submit::{RegisterRequest, TurnstileResponse};
+use crate::structs::submit::{CaptchaResponse, RegisterRequest};
 
 mod database;
 mod error;
@@ -186,13 +186,13 @@ async fn upload(mut payload: Multipart, ws_server: web::Data<WsServerHandle>) ->
 async fn register_pending(req_body: web::Json<RegisterRequest>, email_server: web::Data<EmailServerHandle>) -> HttpResponse{
     let email = &req_body.email;
     let server_name = &req_body.server_name;
-    let cf_token = &req_body.cf_token;
+    let captcha_token = &req_body.captcha_token;
 
-    let params = [("secret", "0x4AAAAAAAknWFphfuuJpHT-LlKElecM02U"), ("response", cf_token)];
+    let params = [("secret", ""), ("response", captcha_token)];
     let client = reqwest::Client::new();
 
-    // 发送turnstile验证请求
-    let res = client.post("https://challenges.cloudflare.com/turnstile/v0/siteverify")
+    // 发送captcha验证请求
+    let res = client.post("https://hcaptcha.com/siteverify")
         .form(&params)
         .send()
         .await;
@@ -201,17 +201,28 @@ async fn register_pending(req_body: web::Json<RegisterRequest>, email_server: we
     match res {
         Ok(response) => {
             if response.status().is_success() {
-                let turnstile_response: TurnstileResponse = response.json().await.unwrap();
-                if turnstile_response.success {
+                let captcha_response: CaptchaResponse = response.json().await.unwrap();
+                if captcha_response.success {
                     // 请求成功，继续下一步
                 } else {
-                    return HttpResponse::Unauthorized().json(json!({"msg": "验证码错误，请重试"}))
+                    match captcha_response.error_codes {
+                        Some(codes) => {
+                            for code in codes {
+                                log::error!("Captcha error code: {}", code);
+                            }
+                            return HttpResponse::InternalServerError().json(json!({"msg": "验证失败，请重试"}))
+                        }
+                        None => {
+                            log::error!("Captcha error: No error codes returned.");
+                            return HttpResponse::InternalServerError().json(json!({"msg": "验证失败，请重试"}))
+                        }
+                    }
+
                 }
-            } else {
-                return HttpResponse::Ok().json(json!({"code": 200}))
             }
         }
-        Err(..) => {
+        Err(e) => {
+            log::error!("Error sending captcha verify request: {}", e);
             return HttpResponse::InternalServerError().json(json!({"msg": "无法进行验证，请稍后重试"}))
         }
     }
@@ -220,8 +231,12 @@ async fn register_pending(req_body: web::Json<RegisterRequest>, email_server: we
     let register_token = email_server.send_token(email.to_string(), server_name.to_string()).await;
     match register_token {
         Ok(_) => HttpResponse::Ok().json(json!({"code": 200})),
-        Err(_) => HttpResponse::InternalServerError().json(json!({"code": 500}))
+        Err(e) => {
+            log::error!("Failed to send email: {:?}", e);
+            HttpResponse::InternalServerError().json(json!({"code": 500}))
+        }
     }
+
 }
 
 // 验证token是否有效
@@ -266,6 +281,8 @@ async fn main() -> io::Result<()> {
         let _ws_server = spawn(ws_server.run());
 
         let _sql_server = spawn(sql_server.run());
+
+        let _email_server = spawn(email_server.run());
 
         let server = HttpServer::new(move || {
             App::new()

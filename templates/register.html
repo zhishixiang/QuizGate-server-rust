@@ -26,11 +26,7 @@
             <input id="servername" class="mdui-textfield-input" type="text" required />
             <div class="mdui-textfield-error">服务器名不能为空</div>
         </div>
-        <div
-                class="cf-turnstile"
-                data-sitekey="0x4AAAAAAAknWA8vGmV7UUkE"
-                data-callback="javascriptCallback"
-        ></div>
+        <div class="h-captcha" data-sitekey="78bce948-82fc-493e-84e2-a282b4ba2df8"></div>
         <div class="mdui-row mdui-col-xs-12">
             <button id="clearButton" class="mdui-btn mdui-ripple">清空</button>
             <button id="submitButton" class="mdui-btn mdui-color-theme-accent mdui-ripple">提交</button>
@@ -39,11 +35,11 @@
 </div>
 </body>
 <script src="https://unpkg.com/mdui@1.0.2/dist/js/mdui.min.js"></script>
-<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+<script src="https://js.hcaptcha.com/1/api.js" async defer></script>
 <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
 
 <script>
-    document.addEventListener('DOMContentLoaded', function() {
+    document.addEventListener('DOMContentLoaded', function (message) {
         document.getElementById('clearButton').addEventListener('click', function() {
             document.getElementById('email').value = '';
             document.getElementById('servername').value = '';
@@ -54,43 +50,34 @@
 
             var serverName = document.getElementById('servername').value;
             if (serverName.length > 20) {
-                mdui.alert('服务器名过长，请重新输入', '错误');
+                mdui.alert('服务器名过长，请重新输入');
                 return;
             }
 
             var email = document.getElementById('email').value;
-            var turnstileResponse = document.querySelector('input[name="cf-turnstile-response"]').value;
+            var hcaptchaResponse = window.hcaptcha.getResponse();
 
-            if (!turnstileResponse) {
-                mdui.alert('请完成验证码', '错误');
+            if (!hcaptchaResponse) {
+                mdui.alert('请完成验证码');
                 return;
             }
-
 
             // 提交注册信息
             axios.post('/api/register', {
                 email: email,
                 server_name: serverName,
-                cf_token: turnstileResponse
+                captcha_token: hcaptchaResponse
             })
 
                 .then(function (response) {
-                    mdui.alert("提交成功，您的分数是" + JSON.parse(response.data.score) + "分\n答题信息："+"\n玩家id:"+this.player_id+"\n答题时间戳:"+Date.now()+"\n是否及格:"+response.data.pass)
+                    mdui.alert("注册成功，请检查是否收到邮件")
                     location.reload()
                 })
                 .catch(function (error) {
                     console.log(error);
-                    mdui.alert("提交失败，请联系开发者处理" + error)
+                    mdui.alert("注册失败，请联系开发者处理" + error)
                 });
     });
-
-    function javascriptCallback(token) {
-        var input = document.createElement('input');
-        input.type = 'hidden';
-        input.name = 'cf-turnstile-response';
-        input.value = token;
-        document.getElementById('input-bar').appendChild(input);
-    }
     });
 </script>
 
