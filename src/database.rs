@@ -79,6 +79,7 @@ impl SqlServer {
 
     pub async fn execute_statement(&mut self, sql_statement: SqlStatement) -> Result<String, Box<dyn Error + Send + Sync>> {
         let result: Result<Option<(String,)>, sqlx::Error> = sqlx::query_as(sql_statement.as_str())
+            .bind(sql_statement.params())
             .fetch_optional(&self.pool)
             .await;
         match result {
