@@ -1,15 +1,14 @@
-use log;
-use tokio::time::{self, Duration};
-use tokio::sync::{mpsc, oneshot};
-use lettre::message::header::ContentType;
+use crate::error::NoSuchValueError;
 use lettre::transport::smtp::authentication::Credentials;
-use lettre::{AsyncSmtpTransport, Message, Transport, Tokio1Executor, AsyncTransport};
+use lettre::{AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor};
+use log;
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::{error::Error, io};
 use tokio::sync::RwLock;
-use std::sync::Arc;
+use tokio::sync::{mpsc, oneshot};
+use tokio::time::{self, Duration};
 use uuid::Uuid;
-use crate::error::NoSuchValueError;
 
 #[derive(Debug)]
 enum Command {
@@ -20,7 +19,7 @@ enum Command {
     },
     ValidateToken {
         token: String,
-        res_tx: oneshot::Sender<Result<(), Box<dyn Error + Send + Sync>>>,
+        res_tx: oneshot::Sender<Result<String, Box<dyn Error + Send + Sync>>>,
     },
 }
 
@@ -37,8 +36,8 @@ impl EmailServer {
     pub fn new() -> (EmailServer, EmailServerHandle) {
         let (cmd_tx, cmd_rx) = mpsc::unbounded_channel();
 
-        let creds = Credentials::new("notify@toho.red".to_string(), "smtp_password".to_string());
-        let smtp_transport = AsyncSmtpTransport::<Tokio1Executor>::relay("smtp.gmail.com")
+        let creds = Credentials::new("notify@toho.red".to_string(), "".to_string());
+        let smtp_transport = AsyncSmtpTransport::<Tokio1Executor>::relay("smtp.zoho.com")
             .unwrap()
             .credentials(creds)
             .build();
@@ -61,29 +60,30 @@ impl EmailServer {
         let link = format!("https://awl.toho.red/verify/{}",token);
 
         let message = Message::builder()
-            .from("noreply@example.com".parse()?)
+            .from("notify@toho.red".parse()?)
             .to(email.parse()?)
             .subject("autowhitelist验证邮件")
             .body(format!(
-                "尊敬的用户您好，欢迎注册autowhitelist服务，您的验证链接为: {},只需点击即可完成注册。\n\
+                "尊敬的用户您好，欢迎注册autowhitelist服务，您的验证链接为: {} ，只需点击即可完成注册。\n\
                 如果您没有注册过相关服务，请忽略本邮件，祝您生活愉快。
             ", link))?;
 
         self.smtp_transport.send(message).await.map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>)?;
 
         // 写入HashMap
-        self.tokens.write().insert(token.clone(), (email, time::Instant::now()));
+        self.tokens.write().await.insert(token.clone(), (email, time::Instant::now()));
         self.server_names.write().await.insert(token, (server_name, link));
         Ok(())
     }
 
-    pub async fn validate_token(&self, token: String) -> Result<(), Box<dyn Error + Send + Sync>> {
+    pub async fn validate_token(&self, token: String) -> Result<String, Box<dyn Error + Send + Sync>> {
         let mut tokens = self.tokens.write().await;
-        if tokens.remove(&token).is_some() {
-            Ok(())
-        } else {
-            Err(Box::new(NoSuchValueError))
+        let mut server_names = self.server_names.write().await;
+        // 如果token存在则返回对应服务器名
+        if let Some((_email, _)) = tokens.remove(&token) {
+            return Ok(server_names.remove(&token).unwrap().0);
         }
+        Err(Box::new(NoSuchValueError))
     }
 
     pub async fn run(mut self) -> io::Result<()> {
@@ -139,7 +139,7 @@ impl EmailServerHandle {
     }
 
     /// 当用户点击url时验证token合法性，如果合法则返回服务器名
-    pub async fn validate_token(&self, token: String) -> Result<(), Box<dyn Error + Send + Sync>> {
+    pub async fn validate_token(&self, token: String) -> Result<String, Box<dyn Error + Send + Sync>> {
         let (res_tx, res_rx) = oneshot::channel();
         self.cmd_tx
             .send(Command::ValidateToken { token, res_tx })
