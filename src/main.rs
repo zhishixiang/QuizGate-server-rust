@@ -20,7 +20,7 @@ use std::time::SystemTime;
 use reqwest::Response;
 use crate::utils::{mark, read_file};
 use tokio::task::{spawn, spawn_local};
-use crate::email_server::EmailServer;
+use crate::email_server::{EmailServer, EmailServerHandle};
 use crate::structs::submit::{RegisterRequest, TurnstileResponse};
 
 mod database;
@@ -183,7 +183,7 @@ async fn upload(mut payload: Multipart, ws_server: web::Data<WsServerHandle>) ->
 }
 
 // 提交注册信息
-async fn register_pending(req_body: web::Json<RegisterRequest>, req: HttpRequest) -> HttpResponse{
+async fn register_pending(req_body: web::Json<RegisterRequest>, email_server: web::Data<EmailServerHandle>, req: HttpRequest) -> HttpResponse{
     let email = &req_body.email;
     let server_name = &req_body.server_name;
     let cf_token = &req_body.cf_token;
@@ -216,10 +216,26 @@ async fn register_pending(req_body: web::Json<RegisterRequest>, req: HttpRequest
         }
     }
 
-
-    HttpResponse::Ok().json(json!({"code": 200}))
+    // 向email_server注册信息
+    let register_token = email_server.send_token(email.to_string()).await;
+    match register_token {
+        Ok(_) => HttpResponse::Ok().json(json!({"code": 200})),
+        Err(_) => HttpResponse::InternalServerError().json(json!({"code": 500}))
+    }
 }
 
+// 验证token是否有效
+async fn verify(path: web::Path<String>, email_server: web::Data<EmailServerHandle>) -> HttpResponse {
+    // 从get请求中获取token参数
+    let token =  path.into_inner();
+
+    // 调用email_server进行验证
+    let result = email_server.validate_token(token.to_string()).await;
+    match result {
+        Ok(_) => HttpResponse::Ok().json(json!({"code": 200})),
+        Err(_) => HttpResponse::Unauthorized().json(json!({"code": 401})),
+    }
+}
 async fn handle_ws_connection(
     req: HttpRequest,
     stream: web::Payload,
@@ -256,6 +272,7 @@ async fn main() -> io::Result<()> {
                 .service(web::resource("/upload").route(web::get().to(upload_page)))
                 .service(web::resource("/register").route(web::get().to(register_page)))
                 .service(web::resource("/").route(web::get().to(index)))
+                .service(web::resource("/verify/{token}").route(web::get().to(verify)))
                 .service(web::resource("/{test_id}").route(web::get().to(index)))
                 .route("/resources/{filename:.*}", web::get().to(resources))
                 .service(
