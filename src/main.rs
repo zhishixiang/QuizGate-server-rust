@@ -183,7 +183,7 @@ async fn upload(mut payload: Multipart, ws_server: web::Data<WsServerHandle>) ->
 }
 
 // 提交注册信息
-async fn register_pending(req_body: web::Json<RegisterRequest>, email_server: web::Data<EmailServerHandle>, req: HttpRequest) -> HttpResponse{
+async fn register_pending(req_body: web::Json<RegisterRequest>, email_server: web::Data<EmailServerHandle>) -> HttpResponse{
     let email = &req_body.email;
     let server_name = &req_body.server_name;
     let cf_token = &req_body.cf_token;
@@ -211,7 +211,7 @@ async fn register_pending(req_body: web::Json<RegisterRequest>, email_server: we
                 return HttpResponse::Ok().json(json!({"code": 200}))
             }
         }
-        Err(e) => {
+        Err(..) => {
             return HttpResponse::InternalServerError().json(json!({"msg": "无法进行验证，请稍后重试"}))
         }
     }
@@ -259,15 +259,19 @@ async fn main() -> io::Result<()> {
 
     if let Ok((sql_server,sql_server_tx)) = SqlServer::new(sql_file).await {
 
-        let (ws_server, ws_server_tx) = WsServer::new(sql_server_tx);
+        let (ws_server, ws_server_tx) = WsServer::new(sql_server_tx.clone());
 
         let (email_server, email_server_tx) = EmailServer::new();
 
         let _ws_server = spawn(ws_server.run());
 
+        let _sql_server = spawn(sql_server.run());
+
         let server = HttpServer::new(move || {
             App::new()
                 .app_data(web::Data::new(ws_server_tx.clone()))
+                .app_data(web::Data::new(email_server_tx.clone()))
+                .app_data(web::Data::new(sql_server_tx.clone()))
                 .service(web::resource("/ws").route(web::get().to(handle_ws_connection)))
                 .service(web::resource("/upload").route(web::get().to(upload_page)))
                 .service(web::resource("/register").route(web::get().to(register_page)))
