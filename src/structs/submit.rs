@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use time::Time;
 
 // 对于提交的试卷进行解析和响应的结构体
 #[derive(Deserialize)]
@@ -20,4 +21,13 @@ pub struct RegisterRequest {
     pub(crate) email: String,
     pub(crate) server_name: String,
     pub(crate) cf_token: String,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct TurnstileResponse {
+    pub(crate) success: bool,
+    #[serde(rename = "error-codes")]
+    error_codes: Option<Vec<String>>,
+    pub(crate) challenge_ts: String,
+
 }
