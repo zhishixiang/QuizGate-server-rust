@@ -9,17 +9,18 @@ pub use crate::structs::submit::{SubmitRequest, SubmitResponse};
 use crate::ws_server::{WsServer, WsServerHandle};
 use actix_files::NamedFile;
 use actix_multipart::Multipart;
-use actix_web::{web, App, Error, HttpRequest, HttpResponse, HttpServer, Result};
+use actix_web::{web, App, Error, HttpMessage, HttpRequest, HttpResponse, HttpServer, Result};
 use database::SqlServer;
 use futures_util::{StreamExt, TryStreamExt};
 use serde_json::{json, Value};
 use structs::awl_type::{Key, SqlFile};
 use std::path::Path;
 use std::sync::Arc;
-
+use std::time::SystemTime;
+use reqwest::Response;
 use crate::utils::{mark, read_file};
 use tokio::task::{spawn, spawn_local};
-use crate::structs::submit::RegisterRequest;
+use crate::structs::submit::{RegisterRequest, TurnstileResponse};
 
 mod database;
 mod error;
@@ -27,7 +28,7 @@ mod structs;
 mod utils;
 mod ws_handler;
 mod ws_server;
-
+mod email_server;
 
 async fn index() -> Result<NamedFile> {
     Ok(NamedFile::open(PathBuf::from("templates/exam.html"))?)
@@ -181,17 +182,41 @@ async fn upload(mut payload: Multipart, ws_server: web::Data<WsServerHandle>) ->
 }
 
 // 提交注册信息
-async fn register_pending(req_body: web::Json<RegisterRequest>) -> HttpResponse{
+async fn register_pending(req_body: web::Json<RegisterRequest>, req: HttpRequest) -> HttpResponse{
     let email = &req_body.email;
     let server_name = &req_body.server_name;
     let cf_token = &req_body.cf_token;
 
     let params = [("secret", "0x4AAAAAAAknWFphfuuJpHT-LlKElecM02U"), ("response", cf_token)];
     let client = reqwest::Client::new();
+
+    // 发送turnstile验证请求
     let res = client.post("https://challenges.cloudflare.com/turnstile/v0/siteverify")
         .form(&params)
         .send()
         .await;
+
+    // 验证请求是否有效
+    match res {
+        Ok(response) => {
+            if response.status().is_success() {
+                let turnstile_response: TurnstileResponse = response.json().await.unwrap();
+                if turnstile_response.success {
+                    // 请求成功，继续下一步
+                } else {
+                    return HttpResponse::Unauthorized().json(json!({"msg": "验证码错误，请重试"}))
+                }
+            } else {
+                return HttpResponse::Ok().json(json!({"code": 200}))
+            }
+        }
+        Err(e) => {
+            return HttpResponse::InternalServerError().json(json!({"msg": "无法进行验证，请稍后重试"}))
+        }
+    }
+
+
+
     HttpResponse::Ok().json(json!({"code": 200}))
 }
 
