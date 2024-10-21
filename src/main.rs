@@ -217,7 +217,7 @@ async fn register_pending(req_body: web::Json<RegisterRequest>, email_server: we
     }
 
     // 向email_server注册信息
-    let register_token = email_server.send_token(email.to_string()).await;
+    let register_token = email_server.send_token(email.to_string(), server_name.to_string()).await;
     match register_token {
         Ok(_) => HttpResponse::Ok().json(json!({"code": 200})),
         Err(_) => HttpResponse::InternalServerError().json(json!({"code": 500}))

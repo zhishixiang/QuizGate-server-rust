@@ -15,6 +15,7 @@ use crate::error::NoSuchValueError;
 enum Command {
     SendToken {
         email: String,
+        server_name: String,
         res_tx: oneshot::Sender<Result<(), Box<dyn Error + Send + Sync>>>,
     },
     ValidateToken {
@@ -25,7 +26,10 @@ enum Command {
 
 pub struct EmailServer {
     cmd_rx: mpsc::UnboundedReceiver<Command>,
+    /// 邮件地址和(token,过期时间)的HashMap
     tokens: Arc<RwLock<HashMap<String, (String, time::Instant)>>>,
+    /// token和服务器名的HashMap
+    server_names: Arc<RwLock<HashMap<String, (String, String)>>>,
     smtp_transport: AsyncSmtpTransport<Tokio1Executor>,
 }
 
@@ -43,6 +47,7 @@ impl EmailServer {
             EmailServer {
                 cmd_rx,
                 tokens: Arc::new(RwLock::new(HashMap::new())),
+                server_names: Arc::new(RwLock::new(HashMap::new())),
                 smtp_transport,
             },
             EmailServerHandle {
@@ -51,7 +56,7 @@ impl EmailServer {
         )
     }
 
-    pub async fn send_token(&mut self, email: String) -> Result<(), Box<dyn Error + Send + Sync>> {
+    pub async fn send_token(&mut self, email: String, server_name: String) -> Result<(), Box<dyn Error + Send + Sync>> {
         let token = Uuid::new_v4().to_string();
         let link = format!("https://awl.toho.red/verify/{}",token);
 
@@ -66,8 +71,9 @@ impl EmailServer {
 
         self.smtp_transport.send(message).await.map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>)?;
 
-        let mut tokens = self.tokens.write().await;
-        tokens.insert(token, (email, time::Instant::now()));
+        // 写入HashMap
+        self.tokens.write().insert(token.clone(), (email, time::Instant::now()));
+        self.server_names.write().await.insert(token, (server_name, link));
         Ok(())
     }
 
@@ -83,13 +89,14 @@ impl EmailServer {
     pub async fn run(mut self) -> io::Result<()> {
         let mut interval = time::interval(Duration::from_secs(60));
         let tokens = self.tokens.clone();
-
+        let server_names = self.server_names.clone();
         loop {
             tokio::select! {
+                // 处理命令
                 Some(cmd) = self.cmd_rx.recv() => {
                     match cmd {
-                        Command::SendToken { email, res_tx } => {
-                            let result = self.send_token(email).await;
+                        Command::SendToken { email, server_name, res_tx } => {
+                            let result = self.send_token(email, server_name).await;
                             let _ = res_tx.send(result);
                         }
                         Command::ValidateToken { token, res_tx } => {
@@ -98,10 +105,17 @@ impl EmailServer {
                         }
                     }
                 }
+                // 定时清除过期token
                 _ = interval.tick() => {
                     let now = time::Instant::now();
                     let mut tokens = tokens.write().await;
-                    tokens.retain(|_, (_, instant)| now.duration_since(*instant) < Duration::from_secs(3600));
+                    let mut server_names = server_names.write().await;
+                    // 移除过期的token以及对应的服务器名
+                    for (token, (_, expire_time)) in tokens.iter() {
+                        if now > *expire_time {
+                            server_names.remove(token);
+                        }
+                    }
                 }
             }
         }
@@ -114,17 +128,17 @@ pub struct EmailServerHandle {
 }
 
 impl EmailServerHandle {
-    // 生成一个新的携带token的链接并发送至指定邮箱
-    pub async fn send_token(&self, email: String) -> Result<(), Box<dyn Error + Send + Sync>> {
+    /// 生成一个新的携带token的链接并发送至指定邮箱，同时存储服务器名
+    pub async fn send_token(&self, email: String, server_name: String) -> Result<(), Box<dyn Error + Send + Sync>> {
         let (res_tx, res_rx) = oneshot::channel();
         self.cmd_tx
-            .send(Command::SendToken { email, res_tx })
+            .send(Command::SendToken { email, server_name, res_tx })
             .unwrap();
 
         res_rx.await.unwrap()
     }
 
-    // 当用户点击url时验证token合法性
+    /// 当用户点击url时验证token合法性，如果合法则返回服务器名
     pub async fn validate_token(&self, token: String) -> Result<(), Box<dyn Error + Send + Sync>> {
         let (res_tx, res_rx) = oneshot::channel();
         self.cmd_tx
