@@ -20,6 +20,7 @@ use std::time::SystemTime;
 use reqwest::Response;
 use crate::utils::{mark, read_file};
 use tokio::task::{spawn, spawn_local};
+use crate::email_server::EmailServer;
 use crate::structs::submit::{RegisterRequest, TurnstileResponse};
 
 mod database;
@@ -216,7 +217,6 @@ async fn register_pending(req_body: web::Json<RegisterRequest>, req: HttpRequest
     }
 
 
-
     HttpResponse::Ok().json(json!({"code": 200}))
 }
 
@@ -244,6 +244,8 @@ async fn main() -> io::Result<()> {
     if let Ok((sql_server,sql_server_tx)) = SqlServer::new(sql_file).await {
 
         let (ws_server, ws_server_tx) = WsServer::new(sql_server_tx);
+
+        let (email_server, email_server_tx) = EmailServer::new();
 
         let _ws_server = spawn(ws_server.run());
 

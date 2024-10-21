@@ -28,6 +28,12 @@ rand = "0.8.5"
 env_logger = "0.11.3"
 time = "0.3.36"
 actix-multipart = "0.5.0"
+lettre = { version = "0.11.9", default-features = false, features = ["builder", "hostname", "smtp-transport", "tokio1-rustls-tls"] }
+uuid = {version = "1.11.0", features = [
+    "v4",                # Lets you generate random UUIDs
+    "fast-rng",          # Use a faster (but still sufficiently random) RNG
+    "macro-diagnostics", # Enable better diagnostics for compile-time UUIDs
+]}
 
 [build-dependencies]
 cc = "1.0"
@@ -35,6 +41,3 @@ cc = "1.0"
 [[example]]
 name = "client"
 path = "examples/client.rs"
-
-[http]
-check-revoke = false

@@ -1,12 +1,14 @@
 use log;
 use tokio::time::{self, Duration};
 use tokio::sync::{mpsc, oneshot};
-use lettre::{AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor};
-use uuid::Uuid;
+use lettre::message::header::ContentType;
+use lettre::transport::smtp::authentication::Credentials;
+use lettre::{AsyncSmtpTransport, Message, Transport, Tokio1Executor, AsyncTransport};
 use std::collections::HashMap;
 use std::{error::Error, io};
 use tokio::sync::RwLock;
 use std::sync::Arc;
+use uuid::Uuid;
 use crate::error::NoSuchValueError;
 
 #[derive(Debug)]
@@ -28,8 +30,14 @@ pub struct EmailServer {
 }
 
 impl EmailServer {
-    pub async fn new(smtp_transport: AsyncSmtpTransport<Tokio1Executor>) -> (EmailServer, EmailServerHandle) {
+    pub fn new() -> (EmailServer, EmailServerHandle) {
         let (cmd_tx, cmd_rx) = mpsc::unbounded_channel();
+
+        let creds = Credentials::new("notify@toho.red".to_string(), "smtp_password".to_string());
+        let smtp_transport = AsyncSmtpTransport::<Tokio1Executor>::relay("smtp.gmail.com")
+            .unwrap()
+            .credentials(creds)
+            .build();
 
         (
             EmailServer {
@@ -43,8 +51,10 @@ impl EmailServer {
         )
     }
 
-    pub async fn send_token(&self, email: String) -> Result<(), Box<dyn Error + Send + Sync>> {
+    pub async fn send_token(&mut self, email: String) -> Result<(), Box<dyn Error + Send + Sync>> {
         let token = Uuid::new_v4().to_string();
+        let link = format!("https://awl.toho.red/verify/{}",token);
+
         let message = Message::builder()
             .from("noreply@example.com".parse()?)
             .to(email.parse()?)
@@ -52,9 +62,9 @@ impl EmailServer {
             .body(format!(
                 "尊敬的用户您好，欢迎注册autowhitelist服务，您的验证链接为: {},只需点击即可完成注册。\n\
                 如果您没有注册过相关服务，请忽略本邮件，祝您生活愉快。
-            ", token))?;
+            ", link))?;
 
-        self.smtp_transport.send(message).await.map_err(|e| Box::new(e) as Box<dyn Error>)?;
+        self.smtp_transport.send(message).await.map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>)?;
 
         let mut tokens = self.tokens.write().await;
         tokens.insert(token, (email, time::Instant::now()));
@@ -70,7 +80,7 @@ impl EmailServer {
         }
     }
 
-    pub async fn run(self) -> io::Result<()> {
+    pub async fn run(mut self) -> io::Result<()> {
         let mut interval = time::interval(Duration::from_secs(60));
         let tokens = self.tokens.clone();
 
