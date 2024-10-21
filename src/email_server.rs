@@ -28,7 +28,7 @@ pub struct EmailServer {
     /// 邮件地址和(token,过期时间)的HashMap
     tokens: Arc<RwLock<HashMap<String, (String, time::Instant)>>>,
     /// token和服务器名的HashMap
-    server_names: Arc<RwLock<HashMap<String, (String, String)>>>,
+    server_names: Arc<RwLock<HashMap<String, String>>>,
     smtp_transport: AsyncSmtpTransport<Tokio1Executor>,
 }
 
@@ -36,7 +36,7 @@ impl EmailServer {
     pub fn new() -> (EmailServer, EmailServerHandle) {
         let (cmd_tx, cmd_rx) = mpsc::unbounded_channel();
 
-        let creds = Credentials::new("notify@toho.red".to_string(), "".to_string());
+        let creds = Credentials::new("notify@toho.red".to_string(), "of2ghuE.".to_string());
         let smtp_transport = AsyncSmtpTransport::<Tokio1Executor>::relay("smtp.zoho.com")
             .unwrap()
             .credentials(creds)
@@ -72,16 +72,17 @@ impl EmailServer {
 
         // 写入HashMap
         self.tokens.write().await.insert(token.clone(), (email, time::Instant::now()));
-        self.server_names.write().await.insert(token, (server_name, link));
+        self.server_names.write().await.insert(token, server_name);
         Ok(())
     }
 
     pub async fn validate_token(&self, token: String) -> Result<String, Box<dyn Error + Send + Sync>> {
         let mut tokens = self.tokens.write().await;
         let mut server_names = self.server_names.write().await;
+        println!("{:?}",server_names);
         // 如果token存在则返回对应服务器名
         if let Some((_email, _)) = tokens.remove(&token) {
-            return Ok(server_names.remove(&token).unwrap().0);
+            return Ok(server_names.remove(&token).unwrap());
         }
         Err(Box::new(NoSuchValueError))
     }
