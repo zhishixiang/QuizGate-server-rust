@@ -12,11 +12,6 @@ pub fn read_file(file_path: &String) -> actix_web::Result<File, std::io::Error> 
     Ok(file)
 }
 
-// 检测tests目录下是否有对应问卷
-pub fn is_test_id_exist(test_id: u32) -> bool {
-    let file_path = format!("tests/{}.json", test_id);
-    Path::new(&file_path).exists()
-}
 
 // 干得好，我要给你打易佰昏！
 pub fn mark(answer: &Vec<Value>, paper_info: &Value) -> i64 {

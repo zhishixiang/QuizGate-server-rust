@@ -26,6 +26,8 @@ mod service;
 pub struct Config {
     pub self_hosted: bool,
     pub self_hosted_key: String,
+    pub address: String,
+    pub port: u16
 }
 
 lazy_static! {
@@ -35,6 +37,8 @@ lazy_static! {
             Config {
                 self_hosted: config["self_hosted"].as_bool().expect("无法读取self_hosted字段！"),
                 self_hosted_key: config["self_hosted_key"].as_str().expect("无法读取self_hosted_key字段！").to_string(),
+                address: config["address"].as_str().expect("无法读取address字段！").to_string(),
+                port: config["port"].as_integer().expect("无法读取port字段！") as u16,
             }
         };
     }
@@ -57,7 +61,6 @@ async fn handle_ws_connection(
 // 启动actix服务
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> io::Result<()> {
-    let address = "127.0.0.1:8081";
     let sql_file:SqlFile = "data.db".to_string();
 
     if let Ok((sql_server,sql_server_tx)) = SqlServer::new(sql_file).await {
@@ -98,11 +101,11 @@ async fn main() -> io::Result<()> {
                     )
             })
             .workers(2)
-            .bind(address)
+            .bind(format!("{address}:{port}",address=CONFIG.address,port=CONFIG.port))
             .expect("端口被占用，无法启动HTTP服务！")
             .run();
             env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
-            log::info!("starting HTTP server at http://{address}");
+            log::info!("{}", format!("starting HTTP server at http://{address}:{port}",address=CONFIG.address,port=CONFIG.port));
             server.await.expect("HTTP服务意外退出:");
         } else {
             // 自托管模式
@@ -121,11 +124,11 @@ async fn main() -> io::Result<()> {
                     )
             })
             .workers(2)
-            .bind(address)
+            .bind(format!("{address}:{port}",address=CONFIG.address,port=CONFIG.port))
             .expect("端口被占用，无法启动HTTP服务！")
             .run();
             env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
-            log::info!("starting HTTP server at http://{address}");
+            log::info!("{}", format!("starting HTTP server at http://{address}:{port}",address=CONFIG.address,port=CONFIG.port));
             log::info!("running in self-hosted mode");
             server.await.expect("HTTP服务意外退出:");
         }
