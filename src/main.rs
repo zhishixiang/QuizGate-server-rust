@@ -59,6 +59,22 @@ async fn handle_ws_connection(
 async fn main() -> io::Result<()> {
     let address = "127.0.0.1:8081";
     let sql_file:SqlFile = "data.db".to_string();
+    // 读取配置文件config.toml
+    struct Config {
+        local: bool,
+        local_key: String,
+    }
+    
+    lazy_static! {
+        static ref CONFIG: Config = {
+            let config_content = fs::read_to_string("config.toml").expect("无法读取配置文件！");
+            let config: Value = toml::from_str(&config_content).expect("配置文件格式错误，请再次确认！");
+            Config {
+                local: config["local"].as_bool().expect("无法读取local字段！"),
+                local_key: config["local_key"].as_str().expect("无法读取local_key字段！").to_string(),
+            }
+        };
+    }
 
     if let Ok((sql_server,sql_server_tx)) = SqlServer::new(sql_file).await {
         // 启动线程
