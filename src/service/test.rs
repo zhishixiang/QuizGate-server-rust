@@ -2,6 +2,7 @@ use std::io::Read;
 use std::path::Path;
 use actix_web::{web, HttpRequest, HttpResponse};
 use serde_json::{json, Value};
+use crate::CONFIG;
 use crate::r#struct::awl_type::Key;
 use crate::{SubmitRequest, SubmitResponse};
 use crate::utils::{mark, read_file};
@@ -9,15 +10,23 @@ use crate::ws_server::WsServerHandle;
 
 // 获取试题内容
 pub(crate) async fn get_test(req: HttpRequest) -> HttpResponse {
+    
     let mut test_info: Value = json!({});
-    let filename: String = req.match_info().query("filename").parse().unwrap();
-    // 如果get参数不为数字则返回错误
-    match filename.parse::<i32>() {
-        Ok(_) => {}
-        Err(_) => return HttpResponse::BadRequest().body("Invalid file path"),
+    let filename: String;
+    let file_path: String;
+    // 自托管模式下默认使用相同目录下的0.json
+    if CONFIG.self_hosted {
+        file_path = "0.json".to_string();
+    } else {
+        filename = req.match_info().query("filename").parse().unwrap();
+        // 如果get参数不为数字则返回错误
+        match filename.parse::<i32>() {
+            Ok(_) => {}
+            Err(_) => return HttpResponse::BadRequest().body("Invalid file path"),
+        }
+        file_path = format!("tests/{}.json", filename);
     }
-    // 为文件加上后缀名
-    let file_path = format!("tests/{}.json", filename);
+    
     if Path::new(&file_path).exists() {
         let mut file = match read_file(&file_path) {
             Ok(value) => value,
@@ -64,7 +73,13 @@ pub(crate) async fn submit(
     let answer = &req_body.answer;
     let player_id = &req_body.player_id;
     let test_id = &req_body.paper_id;
-    let file_path = format!("tests/{}.json", test_id);
+    let file_path: String;
+    // 自托管模式下默认使用相同目录下的0.json
+    if CONFIG.self_hosted {
+        file_path = "0.json".to_string();
+    } else {
+        file_path = format!("tests/{}.json", test_id)
+    }
     let mut score = 0;
     let mut paper_info: Value = json!({});
     // 检测文件是否存在
@@ -95,8 +110,13 @@ pub(crate) async fn submit(
 
     if score >= paper_info["pass"].as_i64().unwrap() {
         pass = true;
-        let key: Key = paper_info["client_key"].as_str().unwrap().to_string();
-        ws_server.send_message(key, player_id).await;
+        // 如果为自托管模式则key默认为配置文件中的值
+        if CONFIG.self_hosted {
+            ws_server.send_message(CONFIG.self_hosted_key.clone(), player_id).await;
+        } else {
+            let key: Key = paper_info["client_key"].as_str().unwrap().to_string();
+            ws_server.send_message(key, player_id).await;
+        }
     }
     HttpResponse::Ok().json(SubmitResponse { score, pass })
 }

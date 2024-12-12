@@ -24,8 +24,8 @@ mod service;
 
 // 读取配置文件config.toml并初始化全局变量
 pub struct Config {
-    pub local: bool,
-    pub local_key: String,
+    pub self_hosted: bool,
+    pub self_hosted_key: String,
 }
 
 lazy_static! {
@@ -33,8 +33,8 @@ lazy_static! {
             let config_content = fs::read_to_string("config.toml").expect("无法读取配置文件！");
             let config: Value = toml::from_str(&config_content).expect("配置文件格式错误，请再次确认！");
             Config {
-                local: config["local"].as_bool().expect("无法读取local字段！"),
-                local_key: config["local_key"].as_str().expect("无法读取local_key字段！").to_string(),
+                self_hosted: config["self_hosted"].as_bool().expect("无法读取self_hosted字段！"),
+                self_hosted_key: config["self_hosted_key"].as_str().expect("无法读取self_hosted_key字段！").to_string(),
             }
         };
     }
@@ -59,22 +59,6 @@ async fn handle_ws_connection(
 async fn main() -> io::Result<()> {
     let address = "127.0.0.1:8081";
     let sql_file:SqlFile = "data.db".to_string();
-    // 读取配置文件config.toml
-    struct Config {
-        local: bool,
-        local_key: String,
-    }
-    
-    lazy_static! {
-        static ref CONFIG: Config = {
-            let config_content = fs::read_to_string("config.toml").expect("无法读取配置文件！");
-            let config: Value = toml::from_str(&config_content).expect("配置文件格式错误，请再次确认！");
-            Config {
-                local: config["local"].as_bool().expect("无法读取local字段！"),
-                local_key: config["local_key"].as_str().expect("无法读取local_key字段！").to_string(),
-            }
-        };
-    }
 
     if let Ok((sql_server,sql_server_tx)) = SqlServer::new(sql_file).await {
         // 启动线程
@@ -86,37 +70,65 @@ async fn main() -> io::Result<()> {
 
         let _sql_server = spawn(sql_server.run());
 
-        let _email_server = spawn(email_server.run());
-
+        // 如果为自托管模式则不创建邮件服务
+        if !CONFIG.self_hosted {
+            let _email_server = spawn(email_server.run());
+        }
         // 启动HTTP服务
-        let server = HttpServer::new(move || {
-            App::new()
-                .app_data(web::Data::new(ws_server_tx.clone()))
-                .app_data(web::Data::new(email_server_tx.clone()))
-                .app_data(web::Data::new(sql_server_tx.clone()))
-                .service(web::resource("/ws").route(web::get().to(handle_ws_connection)))
-                .service(web::resource("/upload").route(web::get().to(pages::upload_page)))
-                .service(web::resource("/register").route(web::get().to(pages::register_page)))
-                .service(web::resource("/").route(web::get().to(pages::index)))
-                .service(web::resource("/verify/{token}").route(web::get().to(register::verify)))
-                .service(web::resource("/{test_id}").route(web::get().to(pages::index)))
-                .route("/resources/{filename:.*}", web::get().to(resources::resources))
-                .service(
-                    web::scope("/api")
-                        .route("/get_test/{filename:.*}", web::get().to(test::get_test))
-                        .route("/upload", web::post().to(upload::upload))
-                        .route("/submit", web::post().to(test::submit))
-                        .route("/register", web::post().to(register::register_pending)),
-                )
-        })
-        .workers(2)
-        .bind(address)
-        .expect("端口被占用，无法启动HTTP服务！")
-        .run();
-        env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
-
-        log::info!("starting HTTP server at http://{address}");
-        server.await.expect("HTTP服务意外退出:");
+        // 非自托管模式
+        if !CONFIG.self_hosted {
+            let server = HttpServer::new(move || {
+                App::new()
+                    .app_data(web::Data::new(ws_server_tx.clone()))
+                    .app_data(web::Data::new(email_server_tx.clone()))
+                    .app_data(web::Data::new(sql_server_tx.clone()))
+                    .service(web::resource("/ws").route(web::get().to(handle_ws_connection)))
+                    .service(web::resource("/upload").route(web::get().to(pages::upload_page)))
+                    .service(web::resource("/register").route(web::get().to(pages::register_page)))
+                    .service(web::resource("/").route(web::get().to(pages::index)))
+                    .service(web::resource("/verify/{token}").route(web::get().to(register::verify)))
+                    .service(web::resource("/{test_id}").route(web::get().to(pages::index)))
+                    .route("/resources/{filename:.*}", web::get().to(resources::resources))
+                    .service(
+                        web::scope("/api")
+                            .route("/get_test/{filename:.*}", web::get().to(test::get_test))
+                            .route("/upload", web::post().to(upload::upload))
+                            .route("/submit", web::post().to(test::submit))
+                            .route("/register", web::post().to(register::register_pending)),
+                    )
+            })
+            .workers(2)
+            .bind(address)
+            .expect("端口被占用，无法启动HTTP服务！")
+            .run();
+            env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
+            log::info!("starting HTTP server at http://{address}");
+            server.await.expect("HTTP服务意外退出:");
+        } else {
+            // 自托管模式
+            let server = HttpServer::new(move || {
+                App::new()
+                    .app_data(web::Data::new(ws_server_tx.clone()))
+                    .app_data(web::Data::new(sql_server_tx.clone()))
+                    .service(web::resource("/ws").route(web::get().to(handle_ws_connection)))
+                    .service(web::resource("/").route(web::get().to(pages::index)))
+                    .service(web::resource("/verify/{token}").route(web::get().to(register::verify)))
+                    .route("/resources/{filename:.*}", web::get().to(resources::resources))
+                    .service(
+                        web::scope("/api")
+                            .route("/get_test/{filename:.*}", web::get().to(test::get_test))
+                            .route("/submit", web::post().to(test::submit))
+                    )
+            })
+            .workers(2)
+            .bind(address)
+            .expect("端口被占用，无法启动HTTP服务！")
+            .run();
+            env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
+            log::info!("starting HTTP server at http://{address}");
+            log::info!("running in self-hosted mode");
+            server.await.expect("HTTP服务意外退出:");
+        }
         Ok(())
     } else {
         panic!("服务启动失败！");

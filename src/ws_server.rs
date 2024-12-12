@@ -1,4 +1,4 @@
-use crate::{database::{SqlServerHandle, SqlStatement}, error::DuplicateConnectionsError, r#struct::awl_type::{ConnId, Key, PlayerId}};
+use crate::{CONFIG, database::{SqlServerHandle, SqlStatement}, error::DuplicateConnectionsError, r#struct::awl_type::{ConnId, Key, PlayerId}};
 use rand::random;
 use std::collections::VecDeque;
 use std::error::Error;
@@ -107,22 +107,33 @@ impl WsServer {
         if self.client_list.contains_key(&key) {
             return Err(DuplicateConnectionsError.into())
         }
-        let sql_statement = SqlStatement{
-            sql:"SELECT name FROM server_info WHERE key = ?".to_string(),
-            params:[key.clone()].to_vec()
-        };
-        let result = self.sql_handler.execute(sql_statement).await;
-        match result {
-            Ok(row) => {
-                // 将key和connID的键值对插入表
-                self.client_list.insert(key.clone(),conn_id);
-                self.client_list_reverse.insert(conn_id,key);
-                Ok(row)
-        }
-            Err(e) => {
-                Err(e)
+        // 自托管模式下只验证已配置的密钥
+            if !CONFIG.self_hosted {
+                let sql_statement = SqlStatement{
+                    sql:"SELECT name FROM server_info WHERE key = ?".to_string(),
+                    params:[key.clone()].to_vec()
+                };
+                let result = self.sql_handler.execute(sql_statement).await;
+                match result {
+                    Ok(row) => {
+                        // 将key和connID的键值对插入表
+                        self.client_list.insert(key.clone(),conn_id);
+                        self.client_list_reverse.insert(conn_id,key);
+                        Ok(row)
+                }
+                    Err(e) => {
+                        Err(e)
+                    }
+                }
+            } else { 
+                if key == CONFIG.self_hosted_key {
+                    self.client_list.insert(key.clone(),conn_id);
+                    self.client_list_reverse.insert(conn_id,key);
+                    Ok("self_hosted".to_string())
+                } else {
+                    Err(DuplicateConnectionsError.into())
+                }
             }
-        }
     }
     async fn add_player(&mut self, key: Key, player_id: PlayerId) {
         if let Some(conn_id) = self.client_list.get(&key) {
@@ -240,6 +251,7 @@ impl WsServerHandle {
 
     /// 验证客户端密钥
     pub async fn verify(&self, key: Key, conn_id: ConnId) -> Result<String, Box<dyn Error + Send + Sync>> {
+        
         let (res_tx, res_rx) = oneshot::channel();
         self.cmd_tx
             .send(Command::Verify {key, conn_id, res_tx })
