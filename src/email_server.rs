@@ -109,7 +109,7 @@ impl EmailServer {
                 // 定时清除过期token
                 _ = interval.tick() => {
                     let now = time::Instant::now();
-                    let mut tokens = tokens.write().await;
+                    let tokens = tokens.write().await;
                     let mut server_names = server_names.write().await;
                     // 移除过期的token以及对应的服务器名
                     for (token, (_, expire_time)) in tokens.iter() {

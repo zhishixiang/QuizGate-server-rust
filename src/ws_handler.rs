@@ -10,7 +10,7 @@ use futures_util::{
 use serde_json::json;
 use tokio::{sync::mpsc, time::interval};
 use crate::error::{DuplicateConnectionsError, NoSuchValueError};
-use crate::structs::awl_type::{ConnId, Key};
+use crate::r#struct::awl_type::{ConnId, Key};
 use crate::ws_server::WsServerHandle;
 
 /// 心跳包发送频率

@@ -1,256 +1,25 @@
 #![allow(unused_assignments)]
 
-use std::fs::File;
 use std::io;
-use std::io::{Read, Write};
-use std::path::PathBuf;
 
-pub use crate::structs::submit::{SubmitRequest, SubmitResponse};
+pub use crate::r#struct::submit::{SubmitRequest, SubmitResponse};
 use crate::ws_server::{WsServer, WsServerHandle};
-use actix_files::NamedFile;
-use actix_multipart::Multipart;
-use actix_web::{web, App, Error, HttpMessage, HttpRequest, HttpResponse, HttpServer, Result};
+use actix_web::{web, App, Error, HttpRequest, HttpResponse, HttpServer, Result};
 use database::SqlServer;
-use futures_util::{StreamExt, TryStreamExt};
-use serde_json::{json, Value};
-use structs::awl_type::{Key, SqlFile};
-use std::path::Path;
-use std::sync::Arc;
-use std::time::SystemTime;
-use reqwest::Response;
-use crate::utils::{mark, read_file};
+use r#struct::awl_type::SqlFile;
 use tokio::task::{spawn, spawn_local};
-use crate::email_server::{EmailServer, EmailServerHandle};
-use crate::structs::submit::{CaptchaResponse, RegisterRequest};
+use crate::email_server::{EmailServer};
+use crate::service::{register, upload, resources, pages, test};
 
 mod database;
 mod error;
-mod structs;
+mod r#struct;
 mod utils;
 mod ws_handler;
 mod ws_server;
 mod email_server;
+mod service;
 
-async fn index() -> Result<NamedFile> {
-    Ok(NamedFile::open(PathBuf::from("templates/exam.html"))?)
-}
-
-async fn upload_page() -> Result<NamedFile> {
-    Ok(NamedFile::open(PathBuf::from("templates/upload.html"))?)
-}
-
-async fn register_page() -> Result<NamedFile> {
-    Ok(NamedFile::open(PathBuf::from("templates/register.html"))?)
-}
-// 静态资源
-async fn resources(req: HttpRequest) -> Result<NamedFile> {
-    let mut path: PathBuf = PathBuf::from("resources/");
-    let filename: String = req.match_info().query("filename").parse()?;
-    path.push(filename);
-    Ok(NamedFile::open(path)?)
-}
-
-// 获取试题内容
-async fn get_test(req: HttpRequest) -> HttpResponse {
-    let mut test_info: Value = json!({});
-    let filename: String = req.match_info().query("filename").parse().unwrap();
-    // 如果get参数不为数字则返回错误
-    match filename.parse::<i32>() {
-        Ok(_) => {}
-        Err(_) => return HttpResponse::BadRequest().body("Invalid file path"),
-    }
-    // 为文件加上后缀名
-    let file_path = format!("tests/{}.json", filename);
-    if Path::new(&file_path).exists() {
-        let mut file = match read_file(&file_path) {
-            Ok(value) => value,
-            Err(error) => {
-                log::error!("读取文件时出现错误：{error}");
-                return HttpResponse::InternalServerError().json(json!({"code": 500}));
-            }
-        };
-
-        let mut contents = String::new();
-        if let Err(_) = file.read_to_string(&mut contents) {
-            return HttpResponse::InternalServerError().json(json!({"code": 500}));
-        }
-
-        test_info = match serde_json::from_str(&contents) {
-            Ok(json) => json,
-            Err(_) => return HttpResponse::InternalServerError().json(json!({"code": 500})),
-        };
-        // 移除不该出现的部分
-        test_info.as_object_mut().unwrap().remove("pass");
-        test_info.as_object_mut().unwrap().remove("client_key");
-        if let Some(questions) = test_info["questions"].as_array_mut() {
-            for question in questions {
-                question.as_object_mut().unwrap().remove("correct");
-                question.as_object_mut().unwrap().remove("score");
-            }
-        }
-        HttpResponse::Ok().json(json!({
-        "code": 200,
-        "data": test_info,
-        "is_server_online": true
-        }))
-    } else {
-        HttpResponse::Ok().json(json!({"code": 404}))
-    }
-}
-
-// 提交试卷并进行打分
-async fn submit(
-    req_body: web::Json<SubmitRequest>,
-    ws_server: web::Data<WsServerHandle>,
-) -> HttpResponse {
-    // 获取post请求内容
-    let answer = &req_body.answer;
-    let player_id = &req_body.player_id;
-    let test_id = &req_body.paper_id;
-    let file_path = format!("tests/{}.json", test_id);
-    let mut score = 0;
-    let mut paper_info: Value = json!({});
-    // 检测文件是否存在
-    if Path::new(&file_path).exists() {
-        let mut file = match read_file(&file_path) {
-            Ok(value) => value,
-            Err(error) => {
-                log::error!("读取文件时出现错误：{error}");
-                return HttpResponse::InternalServerError().json(json!({"code": 500}));
-            }
-        };
-        // 从文件读取问卷信息
-        let mut contents = String::new();
-        if let Err(_) = file.read_to_string(&mut contents) {
-            return HttpResponse::InternalServerError().json(json!({"code": 500}));
-        }
-        // 转换为json文件
-        paper_info = match serde_json::from_str(&contents) {
-            Ok(json) => json,
-            Err(_) => return HttpResponse::InternalServerError().json(json!({"code": 500})),
-        };
-        // 进行评分
-        score = mark(answer, &paper_info);
-    } else {
-        return HttpResponse::NotFound().json(json!({"code": 404}));
-    }
-    let mut pass = false;
-
-    if score >= paper_info["pass"].as_i64().unwrap() {
-        pass = true;
-        let key: Key = paper_info["client_key"].as_str().unwrap().to_string();
-        ws_server.send_message(key, player_id).await;
-    }
-    HttpResponse::Ok().json(SubmitResponse { score, pass })
-}
-
-// 将通过post上传的文件存入tests目录
-async fn upload(mut payload: Multipart, ws_server: web::Data<WsServerHandle>) -> HttpResponse {
-    while let Ok(Some(mut field)) = payload.try_next().await {
-        // 将接收的数据转换为文本
-        let mut text = String::new();
-        while let Some(chunk) = field.next().await {
-            let data = chunk.unwrap();
-            text += std::str::from_utf8(&data).unwrap();
-        }
-
-        // 检测内容是否为json格式
-        return if let Ok(json) = serde_json::from_str::<Value>(&text) {
-            // 验证json格式是否正确
-            if !json.is_object() || !json.as_object().unwrap().contains_key("questions") {
-                return HttpResponse::BadRequest().json(json!({"code": 400}));
-            }
-            // 读取客户端密钥
-            let key: Key = json["client_key"].as_str().unwrap().to_string();
-            let result = ws_server.get_client_id(key).await;
-            match result {
-                Ok(id) => {
-                    let file_path = format!("tests/{}.json", id);
-                    let mut file = File::create(file_path).unwrap();
-                    while let Some(chunk) = field.next().await {
-                        let data = chunk.unwrap();
-                        file.write_all(&data).unwrap();
-                    }
-                    HttpResponse::Ok().json(json!({"code": 200}))
-                }
-                Err(_) => HttpResponse::InternalServerError().json(json!({"code": 500})),
-            }
-        } else {
-            HttpResponse::BadRequest().json(json!({"code": 400}))
-        }
-    }
-    HttpResponse::InternalServerError().json(json!({"code": 500}))
-}
-
-// 提交注册信息
-async fn register_pending(req_body: web::Json<RegisterRequest>, email_server: web::Data<EmailServerHandle>) -> HttpResponse{
-    let email = &req_body.email;
-    let server_name = &req_body.server_name;
-    let captcha_token = &req_body.captcha_token;
-
-    let params = [("secret", ""), ("response", captcha_token)];
-    let client = reqwest::Client::new();
-
-    // 发送captcha验证请求
-    let res = client.post("https://hcaptcha.com/siteverify")
-        .form(&params)
-        .send()
-        .await;
-
-    // 验证请求是否有效
-    match res {
-        Ok(response) => {
-            if response.status().is_success() {
-                let captcha_response: CaptchaResponse = response.json().await.unwrap();
-                if captcha_response.success {
-                    // 请求成功，继续下一步
-                } else {
-                    match captcha_response.error_codes {
-                        Some(codes) => {
-                            for code in codes {
-                                log::error!("Captcha error code: {}", code);
-                            }
-                            return HttpResponse::InternalServerError().json(json!({"msg": "验证失败，请重试"}))
-                        }
-                        None => {
-                            log::error!("Captcha error: No error codes returned.");
-                            return HttpResponse::InternalServerError().json(json!({"msg": "验证失败，请重试"}))
-                        }
-                    }
-
-                }
-            }
-        }
-        Err(e) => {
-            log::error!("Error sending captcha verify request: {}", e);
-            return HttpResponse::InternalServerError().json(json!({"msg": "无法进行验证，请稍后重试"}))
-        }
-    }
-
-    // 向email_server注册信息
-    let register_token = email_server.send_token(email.to_string(), server_name.to_string()).await;
-    match register_token {
-        Ok(_) => HttpResponse::Ok().json(json!({"code": 200})),
-        Err(e) => {
-            log::error!("Failed to send email: {:?}", e);
-            HttpResponse::InternalServerError().json(json!({"code": 500}))
-        }
-    }
-
-}
-
-// 验证token是否有效
-async fn verify(path: web::Path<String>, email_server: web::Data<EmailServerHandle>) -> HttpResponse {
-    // 从get请求中获取token参数
-    let token =  path.into_inner();
-
-    // 调用email_server进行验证
-    let result = email_server.validate_token(token.to_string()).await;
-    match result {
-        Ok(_) => HttpResponse::Ok().json(json!({"code": 200})),
-        Err(_) => HttpResponse::Unauthorized().json(json!({"code": 401})),
-    }
-}
 async fn handle_ws_connection(
     req: HttpRequest,
     stream: web::Payload,
@@ -273,7 +42,7 @@ async fn main() -> io::Result<()> {
     let sql_file:SqlFile = "data.db".to_string();
 
     if let Ok((sql_server,sql_server_tx)) = SqlServer::new(sql_file).await {
-
+        // 启动线程
         let (ws_server, ws_server_tx) = WsServer::new(sql_server_tx.clone());
 
         let (email_server, email_server_tx) = EmailServer::new();
@@ -284,29 +53,30 @@ async fn main() -> io::Result<()> {
 
         let _email_server = spawn(email_server.run());
 
+        // 启动HTTP服务
         let server = HttpServer::new(move || {
             App::new()
                 .app_data(web::Data::new(ws_server_tx.clone()))
                 .app_data(web::Data::new(email_server_tx.clone()))
                 .app_data(web::Data::new(sql_server_tx.clone()))
                 .service(web::resource("/ws").route(web::get().to(handle_ws_connection)))
-                .service(web::resource("/upload").route(web::get().to(upload_page)))
-                .service(web::resource("/register").route(web::get().to(register_page)))
-                .service(web::resource("/").route(web::get().to(index)))
-                .service(web::resource("/verify/{token}").route(web::get().to(verify)))
-                .service(web::resource("/{test_id}").route(web::get().to(index)))
-                .route("/resources/{filename:.*}", web::get().to(resources))
+                .service(web::resource("/upload").route(web::get().to(pages::upload_page)))
+                .service(web::resource("/register").route(web::get().to(pages::register_page)))
+                .service(web::resource("/").route(web::get().to(pages::index)))
+                .service(web::resource("/verify/{token}").route(web::get().to(register::verify)))
+                .service(web::resource("/{test_id}").route(web::get().to(pages::index)))
+                .route("/resources/{filename:.*}", web::get().to(resources::resources))
                 .service(
                     web::scope("/api")
-                        .route("/get_test/{filename:.*}", web::get().to(get_test))
-                        .route("/upload", web::post().to(upload))
-                        .route("/submit", web::post().to(submit))
-                        .route("/register", web::post().to(register_pending)),
+                        .route("/get_test/{filename:.*}", web::get().to(test::get_test))
+                        .route("/upload", web::post().to(upload::upload))
+                        .route("/submit", web::post().to(test::submit))
+                        .route("/register", web::post().to(register::register_pending)),
                 )
         })
         .workers(2)
         .bind(address)
-        .expect("HTTP服务无法绑定端口")
+        .expect("端口被占用，无法启动HTTP服务！")
         .run();
         env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
 
@@ -314,6 +84,6 @@ async fn main() -> io::Result<()> {
         server.await.expect("HTTP服务意外退出:");
         Ok(())
     } else {
-        panic!("读取数据库失败!")
+        panic!("服务启动失败！");
     }
 }
