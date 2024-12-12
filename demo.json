@@ -4,7 +4,7 @@
   "sub_title": "这是一个示例问卷",       // 问卷副标题
   "score": 30,                          // 问卷总分
   "pass": 15,                          // 及格分数线
-  "isInGroup": "True",                 // 是否需要加群验证
+  "isInGroup": "True",                 // 是否需要加群验证(目前暂时没用)
   "isTest": "False",                   // 是否为测试模式
   "client_key": "your_key_here",       // 客户端密钥，自托管模式下无需填写
   "questions": [

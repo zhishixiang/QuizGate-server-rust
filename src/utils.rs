@@ -1,6 +1,5 @@
-use std::fs::File;
-use std::path::Path;
 use serde_json::Value;
+use std::fs::File;
 
 pub fn read_file(file_path: &String) -> actix_web::Result<File, std::io::Error> {
     let file = match File::open(&file_path) {
