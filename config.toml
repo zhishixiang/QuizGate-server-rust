@@ -1,0 +1,4 @@
+# 是否为本地模式
+local = false
+# 本地模式下的key
+local_key = "local_key"

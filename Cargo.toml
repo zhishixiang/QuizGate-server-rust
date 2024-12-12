@@ -5,38 +5,33 @@ edition = "2021"
 
 [dependencies]
 tokio = { version = "1", features = ["full"] }
-reqwest = { version = "0.11", features = ["json"] }
-sqlx = { version = "0.7", features = ["sqlite", "runtime-tokio", "macros"] }
-sqlx-core = "0.7.4"
-bytes = "1.6.0"
-tokio-tungstenite = "0.21.0"
+reqwest = { version = "0.12.9", features = ["json"] }
+sqlx = { version = "0.8.2", features = ["sqlite", "runtime-tokio", "macros"] }
+tokio-tungstenite = "0.24.0"
 futures-util = "0.3.30"
-warp = "0.3"
 futures = "0.3.30"
-tungstenite = "0.21.0"
-http = "1.1.0"
+toml = "0.5.8"
+tungstenite = "0.24.0"
 url = "2.5.0"
 log = "0.4.21"
-json = "*"
 serde_json = "1.0.117"
 serde = { version = "1.0.203", features = ["derive"] }
 actix-web = "4"
-actix-rt = "2"
 actix-files = "0.6.5"
 actix-ws = "0.3.0"
 rand = "0.8.5"
 env_logger = "0.11.3"
 time = "0.3.36"
-actix-multipart = "0.5.0"
+actix-multipart = "0.7.2"
 lettre = { version = "0.11.9", default-features = false, features = ["builder", "hostname", "smtp-transport", "tokio1-rustls-tls"] }
 uuid = {version = "1.11.0", features = [
     "v4",                # Lets you generate random UUIDs
     "fast-rng",          # Use a faster (but still sufficiently random) RNG
     "macro-diagnostics", # Enable better diagnostics for compile-time UUIDs
 ]}
+lazy_static = "1.5.0"
 
 [build-dependencies]
-cc = "1.0"
 
 [[example]]
 name = "client"

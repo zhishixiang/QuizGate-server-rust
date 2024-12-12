@@ -1,6 +1,6 @@
 #![allow(unused_assignments)]
 
-use std::io;
+use std::{fs, io};
 
 pub use crate::r#struct::submit::{SubmitRequest, SubmitResponse};
 use crate::ws_server::{WsServer, WsServerHandle};
@@ -8,6 +8,8 @@ use actix_web::{web, App, Error, HttpRequest, HttpResponse, HttpServer, Result};
 use database::SqlServer;
 use r#struct::awl_type::SqlFile;
 use tokio::task::{spawn, spawn_local};
+use lazy_static::lazy_static;
+use toml::Value;
 use crate::email_server::{EmailServer};
 use crate::service::{register, upload, resources, pages, test};
 
@@ -19,6 +21,23 @@ mod ws_handler;
 mod ws_server;
 mod email_server;
 mod service;
+
+// 读取配置文件config.toml并初始化全局变量
+pub struct Config {
+    pub local: bool,
+    pub local_key: String,
+}
+
+lazy_static! {
+        pub static ref CONFIG: Config = {
+            let config_content = fs::read_to_string("config.toml").expect("无法读取配置文件！");
+            let config: Value = toml::from_str(&config_content).expect("配置文件格式错误，请再次确认！");
+            Config {
+                local: config["local"].as_bool().expect("无法读取local字段！"),
+                local_key: config["local_key"].as_str().expect("无法读取local_key字段！").to_string(),
+            }
+        };
+    }
 
 async fn handle_ws_connection(
     req: HttpRequest,
@@ -44,9 +63,9 @@ async fn main() -> io::Result<()> {
     if let Ok((sql_server,sql_server_tx)) = SqlServer::new(sql_file).await {
         // 启动线程
         let (ws_server, ws_server_tx) = WsServer::new(sql_server_tx.clone());
-
+        
         let (email_server, email_server_tx) = EmailServer::new();
-
+        
         let _ws_server = spawn(ws_server.run());
 
         let _sql_server = spawn(sql_server.run());

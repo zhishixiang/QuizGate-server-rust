@@ -1,7 +1,7 @@
 use crate::error::NoSuchValueError;
 use lettre::transport::smtp::authentication::Credentials;
 use lettre::{AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor};
-use log;
+use crate::CONFIG;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::{error::Error, io};
@@ -34,6 +34,9 @@ pub struct EmailServer {
 
 impl EmailServer {
     pub fn new() -> (EmailServer, EmailServerHandle) {
+        // 如果为自托管模式则不创建服务
+        let local = CONFIG.local;
+        let local_key = CONFIG.local_key.clone();
         let (cmd_tx, cmd_rx) = mpsc::unbounded_channel();
 
         let creds = Credentials::new("notify@toho.red".to_string(), "of2ghuE.".to_string());
