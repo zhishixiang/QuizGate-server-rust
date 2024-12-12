@@ -1,7 +1,6 @@
 use crate::error::NoSuchValueError;
 use lettre::transport::smtp::authentication::Credentials;
 use lettre::{AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor};
-use crate::CONFIG;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::{error::Error, io};
