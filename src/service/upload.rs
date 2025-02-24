@@ -11,9 +11,12 @@ pub(crate) async fn upload(mut payload: Multipart, sql_server_handle: web::Data<
     while let Ok(Some(mut field)) = payload.try_next().await {
         // 将接收的数据转换为文本
         let mut text = String::new();
+        // 同时保存为字节数据以保存文件
+        let mut raw_data = Vec::new();
         while let Some(chunk) = field.next().await {
             match chunk {
                 Ok(data) => {
+                    raw_data.extend_from_slice(&data);
                     match std::str::from_utf8(&data) {
                         Ok(data_str) => text.push_str(data_str),
                         Err(_) => {
@@ -50,10 +53,7 @@ pub(crate) async fn upload(mut payload: Multipart, sql_server_handle: web::Data<
                 Ok(id) => {
                     let file_path = format!("tests/{}.json", id);
                     let mut file = File::create(file_path).unwrap();
-                    while let Some(chunk) = field.next().await {
-                        let data = chunk.unwrap();
-                        file.write_all(&data).unwrap();
-                    }
+                    file.write_all(&raw_data).unwrap();
                     return HttpResponse::Ok().json(json!({"code": 200}))
                 }
                 Err(e) => return HttpResponse::Forbidden().json(json!({"code": e.to_string()})),
