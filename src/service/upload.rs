@@ -6,18 +6,37 @@ use futures_util::{StreamExt, TryStreamExt};
 use serde_json::{json, Value};
 use std::fs::File;
 use std::io::Write;
+use std::str::Utf8Error;
 
 pub(crate) async fn upload(mut payload: Multipart, sql_server_handle: web::Data<SqlServerHandle>) -> HttpResponse {
     while let Ok(Some(mut field)) = payload.try_next().await {
         // 将接收的数据转换为文本
         let mut text = String::new();
         while let Some(chunk) = field.next().await {
-            let data = chunk.unwrap();
-            text += std::str::from_utf8(&data).unwrap();
+            match chunk {
+                Ok(data) => {
+                    match std::str::from_utf8(&data) {
+                        Ok(data_str) => text.push_str(data_str),
+                        Err(_) => {
+                            return HttpResponse::BadRequest().json(json!({
+                                "code": 400,
+                                "message": "Invalid UTF-8 data"
+                            }));
+                        }
+                    }
+                }
+                Err(e) => {
+                    return HttpResponse::InternalServerError().json(json!({
+                        "code": 500,
+                        "message": "Internal server error"
+                    }));
+                }
+
+                }
         }
 
         // 检测内容是否为json格式
-        return if let Ok(json) = serde_json::from_str::<Value>(&text) {
+        if let Ok(json) = serde_json::from_str::<Value>(&text) {
             // 验证json格式是否正确
             if !json.is_object() || !json.as_object().unwrap().contains_key("questions") {
                 return HttpResponse::BadRequest().json(json!({"code": 400}));
@@ -36,12 +55,12 @@ pub(crate) async fn upload(mut payload: Multipart, sql_server_handle: web::Data<
                         let data = chunk.unwrap();
                         file.write_all(&data).unwrap();
                     }
-                    HttpResponse::Ok().json(json!({"code": 200}))
+                    return HttpResponse::Ok().json(json!({"code": 200}))
                 }
-                Err(_) => HttpResponse::Forbidden().json(json!({"code": 403})),
+                Err(e) => return HttpResponse::Forbidden().json(json!({"code": e.to_string()})),
             }
         } else {
-            HttpResponse::BadRequest().json(json!({"code": 400}))
+            return HttpResponse::BadRequest().json(json!({"code": 400}))
         }
     }
     HttpResponse::InternalServerError().json(json!({"code": 500}))
