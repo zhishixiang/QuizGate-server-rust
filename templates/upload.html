@@ -70,7 +70,13 @@
         alert('文件上传成功');
       },
       error: function (jqXHR, textStatus, errorMessage) {
-        alert('文件上传失败: ' + errorMessage);
+        let message = '';
+        if(jqXHR.status === 400) {
+          message = "文件格式错误，请检查语法！";
+        }else if(jqXHR.status === 403) {
+          message = "client_key不存在，请重新检查！";
+        }
+        alert('文件上传失败: ' + message);
       }
     });
   }

@@ -1,12 +1,11 @@
-use std::fs::File;
-use std::io::Write;
+use crate::r#struct::awl_type::Key;
+use crate::sql_server::SqlServerHandle;
 use actix_multipart::Multipart;
 use actix_web::{web, HttpResponse};
 use futures_util::{StreamExt, TryStreamExt};
 use serde_json::{json, Value};
-use crate::r#struct::awl_type::Key;
-use crate::sql_server::SqlServerHandle;
-use crate::ws_server::WsServerHandle;
+use std::fs::File;
+use std::io::Write;
 
 pub(crate) async fn upload(mut payload: Multipart, sql_server_handle: web::Data<SqlServerHandle>) -> HttpResponse {
     while let Ok(Some(mut field)) = payload.try_next().await {
@@ -25,6 +24,9 @@ pub(crate) async fn upload(mut payload: Multipart, sql_server_handle: web::Data<
             }
             // 读取客户端密钥
             let key: Key = json["client_key"].as_str().unwrap().to_string();
+            if key.is_empty() {
+                return HttpResponse::BadRequest().json(json!({"code": 400}));
+            }
             let result = sql_server_handle.get_client_id(key).await;
             match result {
                 Ok(id) => {
@@ -36,7 +38,7 @@ pub(crate) async fn upload(mut payload: Multipart, sql_server_handle: web::Data<
                     }
                     HttpResponse::Ok().json(json!({"code": 200}))
                 }
-                Err(_) => HttpResponse::InternalServerError().json(json!({"code": 500})),
+                Err(_) => HttpResponse::Forbidden().json(json!({"code": 403})),
             }
         } else {
             HttpResponse::BadRequest().json(json!({"code": 400}))

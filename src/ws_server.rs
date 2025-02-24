@@ -35,12 +35,6 @@ enum Command {
         conn_id:ConnId,
         res_tx: oneshot::Sender<Result<String, Box<dyn Error + Send + Sync>>>
     },
-
-    GetClientID {
-        key:Key,
-        res_tx: oneshot::Sender<Result<u32, Box<dyn Error + Send + Sync>>>
-    }
-
 }
 
 #[derive(Debug)]
@@ -176,21 +170,6 @@ impl WsServer {
     async fn queue_message(&mut self, key: Key, player_id: PlayerId) {
         self.pending_messages.entry(key).or_default().push_back(player_id);
     }
-    async fn get_client_id(&self, key: Key) -> Result<u32,Box<dyn Error + Send + Sync>>{
-        let sql_statement = SqlStatement{
-            sql:"SELECT id FROM server_info WHERE key = ?".to_string(),
-            params:[key.clone()].to_vec()
-        };
-        let result= self.sql_handler.execute(sql_statement).await;
-        match result{
-            Ok(row) => {
-                Ok(row.parse().unwrap())
-            }
-            Err(e) => {
-                Err(e)
-            }
-        }
-    }
 
     pub async fn run(mut self) -> io::Result<()> {
         let mut interval = time::interval(Duration::from_secs(5));
@@ -215,11 +194,6 @@ impl WsServer {
 
                         Command::Verify { key, res_tx, conn_id } => {
                             let res = self.verify(key, conn_id).await;
-                            let _ = res_tx.send(res);
-                        }
-
-                        Command::GetClientID { key, res_tx} => {
-                            let res = self.get_client_id(key).await;
                             let _ = res_tx.send(res);
                         }
                     }
@@ -263,17 +237,6 @@ impl WsServerHandle {
     }
 
     
-    pub async fn get_client_id(&self, key: Key) -> Result<u32, Box<dyn Error + Send + Sync>> {
-        let (res_tx, res_rx) = oneshot::channel();
-        self.cmd_tx
-            .send(Command::GetClientID {key, res_tx })
-            .unwrap();
-
-        // unwrap: chat server does not drop out response channel
-        let res = res_rx.await.unwrap();
-        res
-    }
-
     /// 向特定客户端发送消息
     pub async fn send_message(&self, key: Key, player_id: impl Into<PlayerId>) {
         let (res_tx, res_rx) = oneshot::channel();
