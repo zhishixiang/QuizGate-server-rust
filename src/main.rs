@@ -5,15 +5,15 @@ use std::{fs, io};
 pub use crate::r#struct::submit::{SubmitRequest, SubmitResponse};
 use crate::ws_server::{WsServer, WsServerHandle};
 use actix_web::{web, App, Error, HttpRequest, HttpResponse, HttpServer, Result};
-use database::SqlServer;
+use sql_server::SqlServer;
 use r#struct::awl_type::SqlFile;
 use tokio::task::{spawn, spawn_local};
 use lazy_static::lazy_static;
 use toml::Value;
 use crate::email_server::{EmailServer};
-use crate::service::{register, upload, resources, pages, test};
+use crate::service::{register, upload, resources, pages, quiz};
 
-mod database;
+mod sql_server;
 mod error;
 mod r#struct;
 mod utils;
@@ -66,17 +66,17 @@ async fn main() -> io::Result<()> {
     if let Ok((sql_server,sql_server_tx)) = SqlServer::new(sql_file).await {
         // 启动线程
         let (ws_server, ws_server_tx) = WsServer::new(sql_server_tx.clone());
-        
+
         let (email_server, email_server_tx) = EmailServer::new();
-        
+
         let _ws_server = spawn(ws_server.run());
-
-        let _sql_server = spawn(sql_server.run());
-
-        // 如果为自托管模式则不创建邮件服务
+        
+        // 如果为自托管模式则不创建邮件服务和数据库服务
         if !CONFIG.self_hosted {
             let _email_server = spawn(email_server.run());
+            let _sql_server = spawn(sql_server.run());
         }
+        
         // 启动HTTP服务
         // 非自托管模式
         if !CONFIG.self_hosted {
@@ -94,9 +94,9 @@ async fn main() -> io::Result<()> {
                     .route("/resources/{filename:.*}", web::get().to(resources::resources))
                     .service(
                         web::scope("/api")
-                            .route("/get_test/{filename:.*}", web::get().to(test::get_test))
+                            .route("/get_test/{filename:.*}", web::get().to(quiz::get_test))
                             .route("/upload", web::post().to(upload::upload))
-                            .route("/submit", web::post().to(test::submit))
+                            .route("/submit", web::post().to(quiz::submit))
                             .route("/register", web::post().to(register::register_pending)),
                     )
             })
@@ -119,8 +119,8 @@ async fn main() -> io::Result<()> {
                     .route("/resources/{filename:.*}", web::get().to(resources::resources))
                     .service(
                         web::scope("/api")
-                            .route("/get_test/{filename:.*}", web::get().to(test::get_test))
-                            .route("/submit", web::post().to(test::submit))
+                            .route("/get_test/{filename:.*}", web::get().to(quiz::get_test))
+                            .route("/submit", web::post().to(quiz::submit))
                     )
             })
             .workers(2)

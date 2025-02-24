@@ -5,9 +5,10 @@ use actix_web::{web, HttpResponse};
 use futures_util::{StreamExt, TryStreamExt};
 use serde_json::{json, Value};
 use crate::r#struct::awl_type::Key;
+use crate::sql_server::SqlServerHandle;
 use crate::ws_server::WsServerHandle;
 
-pub(crate) async fn upload(mut payload: Multipart, ws_server: web::Data<WsServerHandle>) -> HttpResponse {
+pub(crate) async fn upload(mut payload: Multipart, sql_server_handle: web::Data<SqlServerHandle>) -> HttpResponse {
     while let Ok(Some(mut field)) = payload.try_next().await {
         // 将接收的数据转换为文本
         let mut text = String::new();
@@ -24,7 +25,7 @@ pub(crate) async fn upload(mut payload: Multipart, ws_server: web::Data<WsServer
             }
             // 读取客户端密钥
             let key: Key = json["client_key"].as_str().unwrap().to_string();
-            let result = ws_server.get_client_id(key).await;
+            let result = sql_server_handle.get_client_id(key).await;
             match result {
                 Ok(id) => {
                     let file_path = format!("tests/{}.json", id);

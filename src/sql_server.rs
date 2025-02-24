@@ -5,12 +5,17 @@ use sqlx::{pool::Pool, sqlite::{Sqlite, SqlitePoolOptions}};
 use std::{error::Error, io};
 use std::path::Path;
 use crate::{error::NoSuchValueError, r#struct::awl_type::SqlFile};
+use crate::r#struct::awl_type::Key;
 
 #[derive(Debug)]
 enum Command {
     Execute {
         sql_statement: SqlStatement,
         res_tx: oneshot::Sender<Result<String, Box<dyn Error + Send + Sync>>>,
+    },
+    GetClientID{
+        key:Key,
+        res_tx:oneshot::Sender<Result<u32, Box<dyn Error + Send + Sync>>>
     }
 }
 
@@ -38,6 +43,7 @@ impl SqlStatement {
     }
 }
 
+/// 命令执行层
 impl SqlServer {
     pub async fn new(sql_file: SqlFile) -> Result<(SqlServer, SqlServerHandle), Box<dyn Error>> {
         let (cmd_tx, cmd_rx) = mpsc::unbounded_channel();
@@ -88,8 +94,8 @@ impl SqlServer {
             },
         ))
     }
-
-    pub async fn execute_statement(&mut self, sql_statement: SqlStatement) -> Result<String, Box<dyn Error + Send + Sync>> {
+    
+    async fn execute_statement(&mut self, sql_statement: SqlStatement) -> Result<String, Box<dyn Error + Send + Sync>> {
         let mut query = sqlx::query_as::<_, (String,)>(sql_statement.as_str());
         // 先绑定参数后查询
         for param in sql_statement.params() {
@@ -101,8 +107,24 @@ impl SqlServer {
             Ok(None) => Err(Box::new(NoSuchValueError)),
             Err(e) => Err(Box::new(e)),
         }
-}
-
+    }
+    
+    /// 查询客户端密钥对应的id
+    async fn get_client_id(&mut self, key: Key) -> Result<u32,Box<dyn Error + Send + Sync>>{
+        let mut query = sqlx::query_as::<_, (String,)>("SELECT id FROM server_info WHERE key = ?");
+        query = query.bind(key);
+        let result: Result<Option<(String,)>, sqlx::Error> = query.fetch_optional(&self.pool).await;
+        match result{
+            Ok(Some(row)) => {
+                Ok(row.0.parse().unwrap())
+            }
+            Ok(None) => Err(Box::new(NoSuchValueError)),
+            Err(e) => {
+                Err(Box::new(e))
+            }
+        }
+    }
+    
     pub async fn run(mut self) -> io::Result<()> {
         let mut interval = time::interval(Duration::from_secs(5));
 
@@ -112,6 +134,10 @@ impl SqlServer {
                     match cmd {
                         Command::Execute { sql_statement, res_tx } => {
                             let result = self.execute_statement(sql_statement).await;
+                            let _ = res_tx.send(result);
+                        },
+                        Command::GetClientID { key, res_tx } => {
+                            let result = self.get_client_id(key).await;
                             let _ = res_tx.send(result);
                         }
                     }
@@ -123,17 +149,25 @@ impl SqlServer {
         }
     }
 }
+
+/// handler层
 #[derive(Debug, Clone)]
 pub struct SqlServerHandle {
     cmd_tx: mpsc::UnboundedSender<Command>,
 }
 impl SqlServerHandle {
-    pub async fn execute(&self,sql_statement:SqlStatement) -> Result<String, Box<dyn Error + Send + Sync>>{
+    pub async fn execute(&self,sql_statement:SqlStatement) -> Result<String, Box<dyn Error + Send + Sync>> {
         let (res_tx, res_rx) = oneshot::channel();
         self.cmd_tx
             .send(Command::Execute { sql_statement, res_tx })
             .unwrap();
-
+        res_rx.await.unwrap()
+    }
+    pub async fn get_client_id(&self, key: Key) -> Result<u32, Box<dyn Error + Send + Sync>> {
+        let (res_tx, res_rx) = oneshot::channel();
+        self.cmd_tx
+            .send(Command::GetClientID { key, res_tx })
+            .unwrap();
         // unwrap: chat server does not drop out response channel
         res_rx.await.unwrap()
     }
