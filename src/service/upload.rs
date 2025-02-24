@@ -6,7 +6,6 @@ use futures_util::{StreamExt, TryStreamExt};
 use serde_json::{json, Value};
 use std::fs::File;
 use std::io::Write;
-use std::str::Utf8Error;
 
 pub(crate) async fn upload(mut payload: Multipart, sql_server_handle: web::Data<SqlServerHandle>) -> HttpResponse {
     while let Ok(Some(mut field)) = payload.try_next().await {
@@ -25,14 +24,14 @@ pub(crate) async fn upload(mut payload: Multipart, sql_server_handle: web::Data<
                         }
                     }
                 }
-                Err(e) => {
+                Err(_) => {
                     return HttpResponse::InternalServerError().json(json!({
                         "code": 500,
                         "message": "Internal server error"
                     }));
                 }
 
-                }
+            }
         }
 
         // 检测内容是否为json格式
