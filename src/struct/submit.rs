@@ -27,6 +27,5 @@ pub struct CaptchaResponse {
     pub(crate) success: bool,
     #[serde(rename = "error-codes")]
     pub(crate) error_codes: Option<Vec<String>>,
-    pub(crate) challenge_ts: String,
 
 }

@@ -47,10 +47,15 @@
 
         document.getElementById('submitButton').addEventListener('click', function(event) {
             event.preventDefault();
+            let button = document.querySelector('#submitButton');
+            button.innerHTML =  "等待中";
+            button.setAttribute("disabled","true");
 
             var serverName = document.getElementById('servername').value;
             if (serverName.length > 20) {
                 mdui.alert('服务器名过长，请重新输入');
+                button.innerHTML =  "提交";
+                button.removeAttribute("disabled");
                 return;
             }
 
@@ -59,9 +64,10 @@
 
             if (!hcaptchaResponse) {
                 mdui.alert('请完成验证码');
+                button.innerHTML =  "提交";
+                button.removeAttribute("disabled");
                 return;
             }
-
             // 提交注册信息
             axios.post('/api/register', {
                 email: email,
@@ -70,13 +76,17 @@
             })
 
                 .then(function (response) {
-                    mdui.alert("注册成功，请检查是否收到邮件")
-                    location.reload()
+                    mdui.alert("注册成功，请检查是否收到邮件",function (){
+                        location.reload();
+                    });
                 })
                 .catch(function (error) {
                     console.log(error);
                     mdui.alert("注册失败，请联系开发者处理" + error)
+                    button.innerHTML =  "提交";
+                    button.removeAttribute("disabled");
                 });
+
     });
     });
 </script>

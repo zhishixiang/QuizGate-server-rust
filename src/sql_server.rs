@@ -16,6 +16,10 @@ enum Command {
     GetClientID{
         key:Key,
         res_tx:oneshot::Sender<Result<u32, Box<dyn Error + Send + Sync>>>
+    },
+    RegisterNewClient{
+        name:String,
+        res_tx:oneshot::Sender<Result<String, Box<dyn Error + Send + Sync>>>
     }
 }
 
@@ -94,7 +98,7 @@ impl SqlServer {
             },
         ))
     }
-    
+
     async fn execute_statement(&mut self, sql_statement: SqlStatement) -> Result<String, Box<dyn Error + Send + Sync>> {
         let mut query = sqlx::query_as::<_, (String,)>(sql_statement.as_str());
         // 先绑定参数后查询
@@ -108,15 +112,15 @@ impl SqlServer {
             Err(e) => Err(Box::new(e)),
         }
     }
-    
+
     /// 查询客户端密钥对应的id
     async fn get_client_id(&mut self, key: Key) -> Result<u32,Box<dyn Error + Send + Sync>>{
-        let mut query = sqlx::query_as::<_, (String,)>("SELECT id FROM server_info WHERE key = ?");
+        let mut query = sqlx::query_as::<_, (u32,)>("SELECT id FROM server_info WHERE key = ?");
         query = query.bind(key);
-        let result: Result<Option<(String,)>, sqlx::Error> = query.fetch_optional(&self.pool).await;
+        let result: Result<Option<(u32,)>, sqlx::Error> = query.fetch_optional(&self.pool).await;
         match result{
             Ok(Some(row)) => {
-                Ok(row.0.parse().unwrap())
+                Ok(row.0)
             }
             Ok(None) => Err(Box::new(NoSuchValueError)),
             Err(e) => {
@@ -124,6 +128,19 @@ impl SqlServer {
             }
         }
     }
+    
+    /// 新建客户端账号信息
+    async fn register_new_client(&mut self, name: String) -> Result<String, Box<dyn Error + Send + Sync>> {
+        let key = uuid::Uuid::new_v4().to_string();
+        sqlx::query("INSERT INTO server_info (name, key) VALUES (?, ?)")
+            .bind(name)
+            .bind(&key)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>)?;
+        Ok(key)
+    }
+    
     
     pub async fn run(mut self) -> io::Result<()> {
         let mut interval = time::interval(Duration::from_secs(5));
@@ -138,6 +155,10 @@ impl SqlServer {
                         },
                         Command::GetClientID { key, res_tx } => {
                             let result = self.get_client_id(key).await;
+                            let _ = res_tx.send(result);
+                        },
+                        Command::RegisterNewClient { name, res_tx } => {
+                            let result = self.register_new_client(name).await;
                             let _ = res_tx.send(result);
                         }
                     }
@@ -169,6 +190,13 @@ impl SqlServerHandle {
             .send(Command::GetClientID { key, res_tx })
             .unwrap();
         // unwrap: chat server does not drop out response channel
+        res_rx.await.unwrap()
+    }
+    pub async fn register_new_client(&self, name: String) -> Result<String, Box<dyn Error + Send + Sync>> {
+        let (res_tx, res_rx) = oneshot::channel();
+        self.cmd_tx
+            .send(Command::RegisterNewClient { name, res_tx })
+            .unwrap();
         res_rx.await.unwrap()
     }
 }

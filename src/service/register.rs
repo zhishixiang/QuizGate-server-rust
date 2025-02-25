@@ -2,13 +2,14 @@ use actix_web::{web, HttpResponse};
 use serde_json::json;
 use crate::email_server::EmailServerHandle;
 use crate::r#struct::submit::{CaptchaResponse, RegisterRequest};
+use crate::sql_server::SqlServerHandle;
 
 pub async fn register_pending(req_body: web::Json<RegisterRequest>, email_server: web::Data<EmailServerHandle>) -> HttpResponse{
     let email = &req_body.email;
     let server_name = &req_body.server_name;
     let captcha_token = &req_body.captcha_token;
 
-    let params = [("secret", ""), ("response", captcha_token)];
+    let params = [("secret", "ES_a48a8cc5a4594f80a3393ba309bb5654"), ("response", captcha_token)];
     let client = reqwest::Client::new();
 
     // 发送captcha验证请求
@@ -52,7 +53,7 @@ pub async fn register_pending(req_body: web::Json<RegisterRequest>, email_server
     match register_token {
         Ok(_) => HttpResponse::Ok().json(json!({"code": 200})),
         Err(e) => {
-            log::error!("Failed to send email: {:?}", e);
+            log::error!("发送邮件时出错: {:?}", e);
             HttpResponse::InternalServerError().json(json!({"code": 500}))
         }
     }
@@ -60,14 +61,22 @@ pub async fn register_pending(req_body: web::Json<RegisterRequest>, email_server
 }
 
 // 验证token是否有效
-pub async fn verify(path: web::Path<String>, email_server: web::Data<EmailServerHandle>) -> HttpResponse {
+pub async fn verify(path: web::Path<String>, email_server: web::Data<EmailServerHandle>, sql_server_handle: web::Data<SqlServerHandle>) -> HttpResponse {
     // 从get请求中获取token参数
     let token =  path.into_inner();
 
     // 调用email_server进行验证
     let result = email_server.validate_token(token.to_string()).await;
     match result {
-        Ok(_) => HttpResponse::Ok().json(json!({"code": 200})),
-        Err(_) => HttpResponse::Unauthorized().json(json!({"code": 401})),
+        Ok(server_name) => {
+            match sql_server_handle.register_new_client(server_name).await{
+                Ok(key) => HttpResponse::Ok().body(format!("注册成功，您的client_key为{},请谨慎保管",key)),
+                Err(e) => {
+                    log::error!("添加客户端信息时出错:{:?}",e);
+                    HttpResponse::InternalServerError().body("服务器内部错误，请联系开发者处理")
+                }
+            }
+        }
+        Err(_) => HttpResponse::Unauthorized().body("链接错误或已过期，请再次检查后重试".to_string())
     }
 }

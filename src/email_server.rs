@@ -1,13 +1,14 @@
 use crate::error::NoSuchValueError;
 use lettre::transport::smtp::authentication::Credentials;
 use lettre::{AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor};
+use rand::distributions::Alphanumeric;
+use rand::{thread_rng, Rng};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::{error::Error, io};
 use tokio::sync::RwLock;
 use tokio::sync::{mpsc, oneshot};
 use tokio::time::{self, Duration};
-use uuid::Uuid;
 
 #[derive(Debug)]
 enum Command {
@@ -35,7 +36,7 @@ impl EmailServer {
     pub fn new() -> (EmailServer, EmailServerHandle) {
         let (cmd_tx, cmd_rx) = mpsc::unbounded_channel();
 
-        let creds = Credentials::new("notify@toho.red".to_string(), "of2ghuE.".to_string());
+        let creds = Credentials::new("notify@toho.red".to_string(), "vi3tSdd&".to_string());
         let smtp_transport = AsyncSmtpTransport::<Tokio1Executor>::relay("smtp.zoho.com")
             .unwrap()
             .credentials(creds)
@@ -55,7 +56,12 @@ impl EmailServer {
     }
 
     pub async fn send_token(&mut self, email: String, server_name: String) -> Result<(), Box<dyn Error + Send + Sync>> {
-        let token = Uuid::new_v4().to_string();
+        // 生成16位随机字符串以作为token
+        let token: String = thread_rng()
+            .sample_iter(&Alphanumeric)
+            .take(16)
+            .map(char::from)
+            .collect();
         let link = format!("https://awl.toho.red/verify/{}",token);
 
         let message = Message::builder()
@@ -63,7 +69,7 @@ impl EmailServer {
             .to(email.parse()?)
             .subject("autowhitelist验证邮件")
             .body(format!(
-                "尊敬的用户您好，欢迎注册autowhitelist服务，您的验证链接为: {} ，只需点击即可完成注册。\n\
+                "尊敬的用户您好，欢迎注册autowhitelist服务，您的验证链接为: {} ，只需点击即可完成注册，验证链接10分钟内有效。\n\
                 如果您没有注册过相关服务，请忽略本邮件，祝您生活愉快。
             ", link))?;
 
@@ -78,7 +84,6 @@ impl EmailServer {
     pub async fn validate_token(&self, token: String) -> Result<String, Box<dyn Error + Send + Sync>> {
         let mut tokens = self.tokens.write().await;
         let mut server_names = self.server_names.write().await;
-        println!("{:?}",server_names);
         // 如果token存在则返回对应服务器名
         if let Some((_email, _)) = tokens.remove(&token) {
             return Ok(server_names.remove(&token).unwrap());
@@ -87,7 +92,7 @@ impl EmailServer {
     }
 
     pub async fn run(mut self) -> io::Result<()> {
-        let mut interval = time::interval(Duration::from_secs(60));
+        let mut interval = time::interval(Duration::from_secs(600));
         let tokens = self.tokens.clone();
         let server_names = self.server_names.clone();
         loop {
@@ -145,6 +150,13 @@ impl EmailServerHandle {
             .send(Command::ValidateToken { token, res_tx })
             .unwrap();
 
-        res_rx.await.unwrap()
+        match res_rx.await{
+            Ok(Ok(res)) => Ok(res),
+            Ok(Err(e)) => Err(e),
+            Err(e) => Err(e.into()),
+        }
     }
 }
+
+// 单元测试（这一个服务bug实在太多了被迫复习了一下）
+// todo
