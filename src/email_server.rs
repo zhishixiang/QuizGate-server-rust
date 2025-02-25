@@ -92,7 +92,7 @@ impl EmailServer {
     }
 
     pub async fn run(mut self) -> io::Result<()> {
-        let mut interval = time::interval(Duration::from_secs(600));
+        let mut interval = time::interval(Duration::from_secs(60));
         let tokens = self.tokens.clone();
         let server_names = self.server_names.clone();
         loop {
@@ -117,7 +117,7 @@ impl EmailServer {
                     let mut server_names = server_names.write().await;
                     // 移除过期的token以及对应的服务器名
                     for (token, (_, expire_time)) in tokens.iter() {
-                        if now > *expire_time {
+                        if now - *expire_time > Duration::from_secs(600) {
                             server_names.remove(token);
                         }
                     }
