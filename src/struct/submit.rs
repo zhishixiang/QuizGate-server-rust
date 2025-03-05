@@ -13,6 +13,7 @@ pub struct SubmitRequest {
 pub struct SubmitResponse {
     pub(crate) score: i64,
     pub(crate) pass: bool,
+    pub(crate) count: u32,
 }
 
 #[derive(Deserialize,Debug)]

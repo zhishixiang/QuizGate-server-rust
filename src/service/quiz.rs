@@ -5,6 +5,7 @@ use serde_json::{json, Value};
 use crate::CONFIG;
 use crate::r#struct::awl_type::Key;
 use crate::{SubmitRequest, SubmitResponse};
+use crate::sql_server::SqlServerHandle;
 use crate::utils::{mark, read_file};
 use crate::ws_server::WsServerHandle;
 
@@ -66,19 +67,21 @@ pub(crate) async fn get_test(req: HttpRequest) -> HttpResponse {
 
 // 提交试卷并进行打分
 pub(crate) async fn submit(
+    req: HttpRequest,
     req_body: web::Json<SubmitRequest>,
     ws_server: web::Data<WsServerHandle>,
+    sql_server: web::Data<SqlServerHandle>
 ) -> HttpResponse {
     // 获取post请求内容
     let answer = &req_body.answer;
     let player_id = &req_body.player_id;
-    let test_id = &req_body.paper_id;
+    let paper_id = (&req_body.paper_id).parse::<u32>().unwrap();
     let file_path: String;
     // 自托管模式下默认使用相同目录下的0.json
     if CONFIG.self_hosted {
         file_path = "0.json".to_string();
     } else {
-        file_path = format!("tests/{}.json", test_id)
+        file_path = format!("tests/{}.json", paper_id)
     }
     let mut score = 0;
     let mut paper_info: Value = json!({});
@@ -116,7 +119,9 @@ pub(crate) async fn submit(
         } else {
             let key: Key = paper_info["client_key"].as_str().unwrap().to_string();
             ws_server.send_message(key, player_id).await;
+            sql_server.record_player_success_log(paper_id, player_id.to_string(), req.connection_info().peer_addr().unwrap().to_string()).await.unwrap();
         }
     }
-    HttpResponse::Ok().json(SubmitResponse { score, pass })
+    let count = sql_server.get_client_player_count(paper_id).await.unwrap();
+    HttpResponse::Ok().json(SubmitResponse { score, pass, count })
 }

@@ -4,6 +4,7 @@ use tokio::sync::{mpsc, oneshot};
 use sqlx::{pool::Pool, sqlite::{Sqlite, SqlitePoolOptions}};
 use std::{error::Error, io};
 use std::path::Path;
+use std::time::{SystemTime, UNIX_EPOCH};
 use crate::{error::NoSuchValueError, r#struct::awl_type::SqlFile};
 use crate::r#struct::awl_type::Key;
 
@@ -20,6 +21,15 @@ enum Command {
     RegisterNewClient{
         name:String,
         res_tx:oneshot::Sender<Result<String, Box<dyn Error + Send + Sync>>>
+    },
+    RecordSuccessLog{
+        client_id:u32,
+        player_id:String,
+        ip_address:String,
+    },
+    GetClientPlayerCount{
+        server_id:u32,
+        res_tx:oneshot::Sender<Result<u32, Box<dyn Error + Send + Sync>>>
     }
 }
 
@@ -141,6 +151,32 @@ impl SqlServer {
         Ok(key)
     }
     
+    /// 记录玩家答题成功记录
+    async fn record_player_success_log(&mut self,client_id:u32, player_id: String, ip_address: String) -> Result<(), Box<dyn Error + Send + Sync>> {
+        sqlx::query("INSERT INTO quiz_log (client_id, player_id, passed_time, ip_address) VALUES (?, ?, ?, ?)")
+            .bind(client_id)
+            .bind(player_id)
+            .bind(SystemTime::now()
+                      .duration_since(UNIX_EPOCH)
+                      .unwrap()
+                      .as_secs() as i64)
+            .bind(ip_address)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>)?;
+        Ok(())
+    }
+    
+    /// 获取对应客户端注册成功的玩家数量
+    async fn get_client_player_count(&mut self, server_id: u32) -> Result<u32, Box<dyn Error + Send + Sync>> {
+        let query = sqlx::query_as::<_, (u32,)>("SELECT COUNT(*) FROM quiz_log WHERE client_id = ?")
+            .bind(server_id);
+        let result: Result<(u32,), sqlx::Error> = query.fetch_one(&self.pool).await;
+        match result {
+            Ok(row) => Ok(row.0),
+            Err(e) => Err(Box::new(e)), 
+        }
+    }
     
     pub async fn run(mut self) -> io::Result<()> {
         let mut interval = time::interval(Duration::from_secs(5));
@@ -159,6 +195,16 @@ impl SqlServer {
                         },
                         Command::RegisterNewClient { name, res_tx } => {
                             let result = self.register_new_client(name).await;
+                            let _ = res_tx.send(result);
+                        },
+                        Command::RecordSuccessLog { client_id, player_id, ip_address } => {
+                            let result = self.record_player_success_log(client_id, player_id, ip_address).await;
+                            if let Err(e) = result {
+                                log::error!("记录玩家答题成功记录时出错: {:?}", e);
+                            }
+                        },
+                        Command::GetClientPlayerCount { server_id, res_tx } => {
+                            let result = self.get_client_player_count(server_id).await;
                             let _ = res_tx.send(result);
                         }
                     }
@@ -196,6 +242,19 @@ impl SqlServerHandle {
         let (res_tx, res_rx) = oneshot::channel();
         self.cmd_tx
             .send(Command::RegisterNewClient { name, res_tx })
+            .unwrap();
+        res_rx.await.unwrap()
+    }
+    pub async fn record_player_success_log(&self, client_id: u32, player_id: String, ip_address: String) -> Result<(), Box<dyn Error + Send + Sync>> {
+        self.cmd_tx
+            .send(Command::RecordSuccessLog { client_id, player_id, ip_address })
+            .unwrap();
+        Ok(())
+    }
+    pub async fn get_client_player_count(&self, server_id: u32) -> Result<u32, Box<dyn Error + Send + Sync>> {
+        let (res_tx, res_rx) = oneshot::channel();
+        self.cmd_tx
+            .send(Command::GetClientPlayerCount { server_id, res_tx })
             .unwrap();
         res_rx.await.unwrap()
     }
